@@ -6,6 +6,7 @@ from experiments.data.rust.core cimport QuoteTick_t
 cdef class Symbol:
     cdef Symbol_t _mem
 
+
 cdef class InstrumentId:
     cdef InstrumentId_t _mem
 
@@ -17,6 +18,7 @@ cdef class InstrumentId:
 
     @staticmethod
     cdef InstrumentId from_str_c(str value)
+
 
 cdef class QuoteTick:
     cdef QuoteTick_t _mem

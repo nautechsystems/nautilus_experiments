@@ -15,6 +15,7 @@ cdef class Symbol:
     def __dealloc__(self) -> None:
         symbol_free(self._mem)  # `self._mem` moved to Rust (then dropped)
 
+
 cdef class InstrumentId:
     def __init__(self, Symbol symbol not None, Symbol venue not None):
 
@@ -59,6 +60,7 @@ cdef class InstrumentId:
         instrument_id.venue = Symbol(pieces[1])
 
         return instrument_id
+
 
 cdef class QuoteTick:
 
