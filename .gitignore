@@ -38,14 +38,5 @@ logs/
 venv*/
 
 .DS_Store
-!tests/integration_tests/adapters/betfair/responses/*.log
-tests/test_kit/data/catalog/
 PERF.JSON
-*dask-worker-space*
-output.json
-.ipynb_checkpoints
-examples/backtest/notebooks/catalog
 nautilus_trader/**/.gitignore
-docs/**/*.ipynb
-!nautilus_core/lib/**/*
-!nautilus_trader/core/includes/**
