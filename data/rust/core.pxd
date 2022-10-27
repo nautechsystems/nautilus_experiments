@@ -3,7 +3,7 @@
 from cpython.object cimport PyObject
 from libc.stdint cimport uintptr_t
 
-cdef extern from "../includes/core.h":
+cdef extern from "core.h":
 
     cdef struct String:
         pass

@@ -2,6 +2,7 @@ from rust.core cimport Symbol_t
 from rust.core cimport InstrumentId_t
 from rust.core cimport QuoteTick_t
 
+
 cdef class Symbol:
     cdef Symbol_t _mem
 

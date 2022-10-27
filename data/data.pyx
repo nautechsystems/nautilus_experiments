@@ -1,12 +1,12 @@
 from cpython.object cimport PyObject
 
-from rust.core import quote_tick_free
-from rust.core import quote_tick_from_raw
-from rust.core import symbol_new
-from rust.core import symbol_free
-from rust.core import symbol_to_pystr
-from rust.core import instrument_id_new
-from rust.core import instrument_id_free
+from rust.core cimport quote_tick_free
+from rust.core cimport quote_tick_from_raw
+from rust.core cimport symbol_new
+from rust.core cimport symbol_free
+from rust.core cimport instrument_id_new
+from rust.core cimport instrument_id_free
+
 
 cdef class Symbol:
     def __init__(self, str value):

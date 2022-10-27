@@ -8,13 +8,10 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from Cython.Build import build_ext
-from Cython.Build import cythonize
+from Cython.Build import build_ext, cythonize
 from Cython.Compiler import Options
 from Cython.Compiler.Version import version as cython_compiler_version
-from setuptools import Distribution
-from setuptools import Extension
-
+from setuptools import Distribution, Extension
 
 # The build mode (affects cargo)
 BUILD_MODE = os.getenv("BUILD_MODE", "debug")
@@ -48,11 +45,11 @@ else:
 
 # Directories with headers to include
 RUST_INCLUDES = [
-    "nautilus_trader/data/includes",
+    "data/includes",
 ]
 
 RUST_LIBS = [
-    f"nautilus_core/target/{TARGET_DIR}{BUILD_MODE}/{RUST_LIB_PFX}core.{RUST_LIB_EXT}",
+    f"core/target/{TARGET_DIR}{BUILD_MODE}/{RUST_LIB_PFX}core.{RUST_LIB_EXT}",
 ]
 # Later we can be more selective about which libs are included where - to optimize binary sizes
 
@@ -207,7 +204,9 @@ if __name__ == "__main__":
     print("\033[36m")
     print("=====================================================================")
     print("Nautilus Builder")
-    print("=====================================================================\033[0m")
+    print(
+        "=====================================================================\033[0m"
+    )
 
     ts_start = datetime.utcnow()
 

@@ -6,8 +6,6 @@ authors = ["Nautech Systems <info@nautechsystems.io>"]
 license = "LGPL-3.0-or-later"
 readme = "README.md"
 
-
-
 [build-system]
 requires = [
     "setuptools",
@@ -23,3 +21,4 @@ generate-setup-file = false
 [tool.poetry.dependencies]
 python = ">=3.9,<3.11"
 cython = "3.0.0a9"  # Pinned at 3.0.0a9
+
