@@ -20,5 +20,7 @@ generate-setup-file = false
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.11"
-cython = "3.0.0a9"  # Pinned at 3.0.0a9
+cython = "3.0.0a11"
 
+[tool.poetry.dev-dependencies]
+pytest = "^7.1.3"

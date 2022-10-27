@@ -1,6 +1,6 @@
-from rust.core cimport Symbol_t
-from rust.core cimport InstrumentId_t
-from rust.core cimport QuoteTick_t
+from data.rust.core cimport Symbol_t
+from data.rust.core cimport InstrumentId_t
+from data.rust.core cimport QuoteTick_t
 
 
 cdef class Symbol:
