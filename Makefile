@@ -8,11 +8,11 @@ clean:
 	git clean -fxd
 
 cargo-update:
-	(cd nautilus_core && cargo update)
+	(cd experiments/core && cargo update)
 
 cargo-test:
-	(cd nautilus_core && cargo test)
+	(cd experiments/core && cargo test)
 
 update:
-	(cd nautilus_core && cargo update)
+	(cd experiments/core && cargo update)
 	poetry update

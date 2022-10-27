@@ -15,7 +15,7 @@
 
 import gc
 
-from data.data import InstrumentId, Symbol, QuoteTick
+from experiments.data import InstrumentId, QuoteTick, Symbol
 
 
 class TestQuoteTick:

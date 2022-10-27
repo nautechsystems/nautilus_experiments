@@ -33,7 +33,7 @@ if platform.system() == "Windows":
     os.environ["CC"] = "clang"
     os.environ["LDSHARED"] = "clang -shared"
     # https://docs.microsoft.com/en-US/cpp/error-messages/tool-errors/linker-tools-error-lnk1181?view=msvc-170&viewFallbackFrom=vs-2019
-    target_dir = os.path.join(os.getcwd(), "core", "target", BUILD_MODE)
+    target_dir = os.path.join(os.getcwd(), "experiments", "core", "target", BUILD_MODE)
     os.environ["LIBPATH"] = os.environ.get("LIBPATH", "") + f":{target_dir}"
     RUST_LIB_PFX = ""
     RUST_LIB_EXT = "lib"
@@ -45,11 +45,11 @@ else:
 
 # Directories with headers to include
 RUST_INCLUDES = [
-    "data/includes",
+    "experiments/data/includes",
 ]
 
 RUST_LIBS = [
-    f"core/target/{TARGET_DIR}{BUILD_MODE}/{RUST_LIB_PFX}core.{RUST_LIB_EXT}",
+    f"experiments/core/target/{TARGET_DIR}{BUILD_MODE}/{RUST_LIB_PFX}core.{RUST_LIB_EXT}",
 ]
 # Later we can be more selective about which libs are included where - to optimize binary sizes
 
@@ -63,7 +63,7 @@ def _build_rust_libs() -> None:
     build_options += " --release" if BUILD_MODE == "release" else ""
     # Build the Rust libraries using Cargo
     print("Compiling Rust libraries...")
-    build_cmd = f"(cd core && cargo build{build_options}{extra_flags} --all-features)"
+    build_cmd = f"(cd experiments/core && cargo build{build_options}{extra_flags} --all-features)"
     print(build_cmd)
     os.system(build_cmd)  # noqa
 
@@ -130,7 +130,7 @@ def _build_extensions() -> list[Extension]:
             extra_link_args=extra_link_args,
             extra_compile_args=extra_compile_args,
         )
-        for pyx in itertools.chain(Path("data").rglob("*.pyx"))
+        for pyx in itertools.chain(Path("experiments").rglob("*.pyx"))
     ]
 
 

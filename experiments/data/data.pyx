@@ -1,11 +1,11 @@
 from cpython.object cimport PyObject
 
-from data.rust.core cimport quote_tick_free
-from data.rust.core cimport quote_tick_from_raw
-from data.rust.core cimport symbol_new
-from data.rust.core cimport symbol_free
-from data.rust.core cimport instrument_id_new
-from data.rust.core cimport instrument_id_free
+from experiments.data.rust.core cimport quote_tick_free
+from experiments.data.rust.core cimport quote_tick_from_raw
+from experiments.data.rust.core cimport symbol_new
+from experiments.data.rust.core cimport symbol_free
+from experiments.data.rust.core cimport instrument_id_new
+from experiments.data.rust.core cimport instrument_id_free
 
 
 cdef class Symbol:
