@@ -14,28 +14,12 @@
 # -------------------------------------------------------------------------------------------------
 
 import gc
-import pysnooper
 
-from experiments.data.objects import InstrumentId, QuoteTick, Symbol
+from experiments.data.objects import Symbol
 
 
 class TestQuoteTick:
-    @pysnooper.snoop()
     def test_make_quote_tick(self):
-        def obj():
-            instrument_id = InstrumentId(
-                symbol=Symbol("AUD/USD"),
-            )
-            return instrument_id
-        
-        instrument_id = obj()
-        print(instrument_id.symbol)
-
-        gc.collect()
-        print(instrument_id)
-
-        # tick = QuoteTick(instrument_id)
-        # tick.print()
-        print("here")
-        print(instrument_id.symbol)
-        
+        symbol=Symbol("AUD/USD"),
+        new_symbol = Symbol.from_raw(symbol._mem)
+        print(new_symbol)
