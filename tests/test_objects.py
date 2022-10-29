@@ -20,6 +20,8 @@ from experiments.data.objects import Symbol
 
 class TestQuoteTick:
     def test_make_quote_tick(self):
-        symbol = Symbol("AUD/USD")
+        symbol=Symbol("AUD/USD")
+        print(f"python side symbol: {symbol._mem}")
         new_symbol = Symbol.from_raw_py(symbol)
-        print(new_symbol)
+        print(f"python side symbol after new symbol: {symbol._mem}")
+        del symbol
