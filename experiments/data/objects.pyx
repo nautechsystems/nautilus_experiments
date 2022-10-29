@@ -23,4 +23,4 @@ cdef class Symbol:
 
     @staticmethod
     def from_raw_py(Symbol val) -> Symbol:
-        Symbol.from_raw(val._mem)
+        return Symbol.from_raw(val._mem)
