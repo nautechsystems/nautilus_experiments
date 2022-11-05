@@ -23,10 +23,9 @@ pub unsafe extern "C" fn symbol_new(ptr: *mut ffi::PyObject) -> Symbol {
     Symbol { value }
 }
 
-/// Frees the memory for the given `symbol` by dropping.
 #[no_mangle]
-pub extern "C" fn symbol_from_raw(symbol: Symbol) -> Symbol {
-    symbol
+pub extern "C" fn symbol_copy(symbol: &Symbol) -> Symbol {
+    symbol.clone()
 }
 
 /// Frees the memory for the given `symbol` by dropping.

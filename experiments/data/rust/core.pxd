@@ -17,8 +17,7 @@ cdef extern from "core.h":
     # - Assumes `ptr` is borrowed from a valid Python UTF-8 `str`.
     Symbol_t symbol_new(PyObject *ptr);
 
-    # Frees the memory for the given `symbol` by dropping.
-    Symbol_t symbol_from_raw(Symbol_t symbol);
+    Symbol_t symbol_copy(const Symbol_t *symbol);
 
     # Frees the memory for the given `symbol` by dropping.
     void symbol_free(Symbol_t symbol);
