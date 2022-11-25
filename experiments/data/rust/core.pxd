@@ -5,11 +5,11 @@ from libc.stdint cimport uintptr_t
 
 cdef extern from "core.h":
 
-    cdef struct String:
+    cdef struct Rc_String:
         pass
 
     cdef struct Symbol_t:
-        String *value;
+        Rc_String *value;
 
     # Returns a Nautilus identifier from a valid Python object pointer.
     #
@@ -21,3 +21,5 @@ cdef extern from "core.h":
 
     # Frees the memory for the given `symbol` by dropping.
     void symbol_free(Symbol_t symbol);
+
+    void symbol_vec_text(void *data, uintptr_t len);
