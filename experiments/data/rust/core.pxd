@@ -37,7 +37,9 @@ cdef extern from "core.h":
     # Frees the memory for the given `symbol` by dropping.
     void symbol_free(Symbol_t symbol);
 
-    void symbol_vec_test(void *data, uintptr_t len);
+    void symbol_vector_test(void *data, uintptr_t len);
+
+    void symbol_cvec_test(CVec data);
 
     CVec cvec_new();
 

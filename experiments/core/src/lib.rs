@@ -2,6 +2,7 @@ use std::ffi::c_void;
 use std::rc::Rc;
 use std::slice;
 
+use cvec::CVec;
 use pyo3::types::PyString;
 use pyo3::{ffi, FromPyPointer, Python};
 
@@ -42,8 +43,17 @@ pub extern "C" fn symbol_free(symbol: Symbol) {
 }
 
 #[no_mangle]
-pub extern "C" fn symbol_vec_test(data: *mut c_void, len: usize) {
+pub extern "C" fn symbol_vector_test(data: *mut c_void, len: usize) {
     let data: &[Symbol] = unsafe { slice::from_raw_parts(data as *const Symbol, len) };
+    let v = &data[len - 1];
+    dbg!(Rc::strong_count(&v.value));
+    dbg!(len, &data[len - 1]);
+}
+
+#[no_mangle]
+pub extern "C" fn symbol_cvec_test(data: cvec::CVec) {
+    let CVec { ptr, len, cap: _ } = data;
+    let data: &[Symbol] = unsafe { slice::from_raw_parts(ptr as *const Symbol, len) };
     let v = &data[len - 1];
     dbg!(Rc::strong_count(&v.value));
     dbg!(len, &data[len - 1]);
