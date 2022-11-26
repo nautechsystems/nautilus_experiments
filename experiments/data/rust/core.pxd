@@ -11,6 +11,21 @@ cdef extern from "core.h":
     cdef struct Symbol_t:
         Rc_String *value;
 
+    # CVec is a C compatible struct that stores an opaque pointer to a block of
+    # memory, it's length and the capacity of the vector it was allocated from.
+    #
+    # NOTE: Changing the values here may lead to undefined behaviour when the
+    # memory is dropped.
+    cdef struct CVec:
+        # Opaque pointer to block of memory storing elements to access the
+        # elements cast it to the underlying type.
+        void *ptr;
+        # The number of elements in the block.
+        uintptr_t len;
+        # The capacity of vector from which it was allocated.
+        # Used when deallocating the memory
+        uintptr_t cap;
+
     # Returns a Nautilus identifier from a valid Python object pointer.
     #
     # # Safety
@@ -22,4 +37,11 @@ cdef extern from "core.h":
     # Frees the memory for the given `symbol` by dropping.
     void symbol_free(Symbol_t symbol);
 
-    void symbol_vec_text(void *data, uintptr_t len);
+    void symbol_vec_test(void *data, uintptr_t len);
+
+    CVec cvec_new();
+
+    # # Safety
+    # - Assumes `chunk` is a valid `ptr` pointer to a contiguous byte array
+    # Default drop assumes the chunk is byte buffer that came from a Vec<u8>
+    void cvec_free(CVec cvec);

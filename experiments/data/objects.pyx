@@ -6,7 +6,7 @@ from libc.stdio cimport printf
 
 from experiments.data.rust.core cimport symbol_new
 from experiments.data.rust.core cimport symbol_free
-from experiments.data.rust.core cimport symbol_vec_text
+from experiments.data.rust.core cimport symbol_vec_test
 from experiments.data.rust.core cimport Symbol_t
 
 
@@ -21,5 +21,4 @@ cdef class Symbol:
 cdef void* create_vector(list items):
     cdef vector[Symbol_t] vec
     [vec.push_back(<Symbol_t>(<Symbol>item)._mem) for item in items]
-    symbol_vec_text(<void*>vec.data(), len(items))
-
+    symbol_vec_test(<void*>vec.data(), len(items))

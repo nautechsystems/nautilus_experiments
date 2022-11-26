@@ -5,6 +5,8 @@ use std::slice;
 use pyo3::types::PyString;
 use pyo3::{ffi, FromPyPointer, Python};
 
+pub mod cvec;
+
 #[repr(C)]
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
 #[allow(clippy::box_collection)] // C ABI compatibility
@@ -40,7 +42,7 @@ pub extern "C" fn symbol_free(symbol: Symbol) {
 }
 
 #[no_mangle]
-pub extern "C" fn symbol_vec_text(data: *mut c_void, len: usize) {
+pub extern "C" fn symbol_vec_test(data: *mut c_void, len: usize) {
     let data: &[Symbol] = unsafe { slice::from_raw_parts(data as *const Symbol, len) };
     let v = &data[len - 1];
     dbg!(Rc::strong_count(&v.value));
