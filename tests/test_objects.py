@@ -13,16 +13,14 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
-from experiments.data.objects import Symbol, test_cvec, test_vector
+from experiments.data.objects import Symbol, send_list, receive_buffer
 
 class TestQuoteTick:
     def test_large_allocation(self):
         data = [Symbol("hello world") for _ in range(10000)]
-        test_cvec(data)
-        test_vector(data)
+        send_list(data)
 
 if __name__ == "__main__":
     t = TestQuoteTick()
 
     t.test_large_allocation()
-

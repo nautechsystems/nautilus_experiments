@@ -1,11 +1,14 @@
-# distutils: language = c++
-
-from libcpp.vector cimport vector
 from cpython.object cimport PyObject
 from libc.stdio cimport printf
 
+from cpython.mem cimport PyMem_Free
+from cpython.mem cimport PyMem_Malloc
+from cpython.mem cimport PyMem_Realloc
+
 from experiments.data.rust.core cimport symbol_new
 from experiments.data.rust.core cimport symbol_free
+from experiments.data.rust.core cimport symbol_clone_void
+from experiments.data.rust.core cimport symbol_clone
 from experiments.data.rust.core cimport symbol_cvec_test
 from experiments.data.rust.core cimport symbol_vector_test
 from experiments.data.rust.core cimport Symbol_t
@@ -20,16 +23,33 @@ cdef class Symbol:
         if self._mem.value != NULL:
             symbol_free(self._mem)  # `self._mem` moved to Rust (then dropped)
 
-cdef void test_cvec(list items):
-    cdef vector[Symbol_t] vec
-    cdef CVec data
-    [vec.push_back(<Symbol_t>(<Symbol>item)._mem) for item in items]
-    data.ptr = <void*>vec.data()
-    data.len = len(items)
-    data.cap = 0
-    symbol_cvec_test(data)
+    @staticmethod
+    cdef inline Symbol from_mem_void(Symbol_t* mem):
+        obj = Symbol.__init__()
+        obj._mem = symbol_clone_void(<void*>mem)
+        return obj
 
-cdef void test_vector(list items):
-    cdef vector[Symbol_t] vec
-    [vec.push_back(<Symbol_t>(<Symbol>item)._mem) for item in items]
-    symbol_vector_test(<void*>vec.data(), len(items))
+    @staticmethod
+    cdef inline Symbol from_mem(Symbol_t* mem):
+        obj = Symbol.__init__()
+        obj._mem = symbol_clone(mem)
+        return obj
+
+cdef void send_list(list items):
+    cdef Symbol_t* data
+    data = <Symbol_t*> PyMem_Malloc(len(items) * sizeof(Symbol_t))
+    if not data:
+        raise MemoryError()
+    for i in range(len(items)):
+        data[i] = (<Symbol>items[i])._mem
+
+    symbol_vector_test(<void*>data, len(items))
+
+    PyMem_Free(data)
+
+cdef list receive_buffer(CVec buffer):
+    data = []
+    for i in range(0, buffer.len):
+        data.append(Symbol.from_mem((<Symbol_t*>buffer.ptr)[i]))
+        
+    return data
