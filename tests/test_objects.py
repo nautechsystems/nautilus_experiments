@@ -15,10 +15,12 @@
 
 from experiments.data.objects import Symbol, send_list, receive_buffer
 
+
 class TestQuoteTick:
     def test_large_allocation(self):
         data = [Symbol("hello world") for _ in range(10000)]
         send_list(data)
+
 
 if __name__ == "__main__":
     t = TestQuoteTick()

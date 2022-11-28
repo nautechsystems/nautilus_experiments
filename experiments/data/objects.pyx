@@ -25,13 +25,13 @@ cdef class Symbol:
 
     @staticmethod
     cdef inline Symbol from_mem_void(Symbol_t* mem):
-        obj = Symbol.__init__()
+        cdef Symbol obj = Symbol.__new__(Symbol)
         obj._mem = symbol_clone_void(<void*>mem)
         return obj
 
     @staticmethod
     cdef inline Symbol from_mem(Symbol_t* mem):
-        obj = Symbol.__init__()
+        cdef Symbol obj = Symbol.__new__(Symbol)
         obj._mem = symbol_clone(mem)
         return obj
 
@@ -50,6 +50,6 @@ cdef void send_list(list items):
 cdef list receive_buffer(CVec buffer):
     data = []
     for i in range(0, buffer.len):
-        data.append(Symbol.from_mem((<Symbol_t*>buffer.ptr)[i]))
+        data.append(Symbol.from_mem(&(<Symbol_t*>buffer.ptr)[i]))
         
     return data

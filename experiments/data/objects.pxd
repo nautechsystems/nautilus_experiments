@@ -13,6 +13,6 @@ cdef class Symbol:
     @staticmethod
     cdef inline Symbol from_mem(Symbol_t* mem)
 
-cdef void send_list(list items)
 
+cdef void send_list(list items)
 cdef list receive_buffer(CVec buffer)
