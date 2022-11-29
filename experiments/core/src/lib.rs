@@ -48,7 +48,13 @@ pub extern "C" fn symbol_free(symbol: Symbol) {
 }
 
 #[no_mangle]
-pub extern "C" fn symbol_vector_test(data: *mut c_void, len: usize) {
+pub extern "C" fn symbol_dbg(symbol: &Symbol) {
+    dbg!(&symbol.value);
+    dbg!(Rc::strong_count(&symbol.value));
+}
+
+#[no_mangle]
+pub extern "C" fn symbol_buffer_test(data: *mut c_void, len: usize) {
     let data: &[Symbol] = unsafe { slice::from_raw_parts(data as *const Symbol, len) };
     let v = &data[len - 1];
     dbg!(Rc::strong_count(&v.value));
@@ -56,10 +62,20 @@ pub extern "C" fn symbol_vector_test(data: *mut c_void, len: usize) {
 }
 
 #[no_mangle]
-pub extern "C" fn symbol_cvec_test(data: cvec::CVec) {
-    let CVec { ptr, len, cap: _ } = data;
-    let data: &[Symbol] = unsafe { slice::from_raw_parts(ptr as *const Symbol, len) };
-    let v = &data[len - 1];
-    dbg!(Rc::strong_count(&v.value));
-    dbg!(len, &data[len - 1]);
+pub extern "C" fn symbol_generate_data() -> CVec {
+    let symbol = Symbol { value: Box::new(Rc::new("hello world".to_string()))};
+    let mut data: Vec<Symbol> = Vec::new();
+    (0..100000).for_each(|_| {
+        data.push(symbol.clone());
+    });
+    symbol_dbg(&symbol);
+    data.into()
+}
+
+#[no_mangle]
+pub extern "C" fn symbol_free_data(cvec: CVec) {
+    let CVec { ptr, len, cap } = cvec;
+    let data: Vec<Symbol> = unsafe { Vec::from_raw_parts(ptr as *mut Symbol, len, cap) };
+    symbol_dbg(&data[0]);
+    drop(data) // Memory freed here
 }

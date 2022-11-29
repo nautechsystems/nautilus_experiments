@@ -8,11 +8,10 @@ cdef class Symbol:
     cdef uint64_t val
 
     @staticmethod
-    cdef inline Symbol from_mem_void(Symbol_t* mem)
+    cdef Symbol from_mem(Symbol_t* mem)
 
     @staticmethod
-    cdef inline Symbol from_mem(Symbol_t* mem)
-
-
-cdef void send_list(list items)
-cdef list receive_buffer(CVec buffer)
+    cdef void send_list(list items)
+    
+    @staticmethod
+    cdef list receive_buffer()

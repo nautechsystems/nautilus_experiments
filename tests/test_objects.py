@@ -13,16 +13,21 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
-from experiments.data.objects import Symbol, send_list, receive_buffer
+from experiments.data.objects import Symbol
+
+def test_clone():
+    a = Symbol("hello world")
+    b = Symbol.clone(a)
+    a.dbg()
+    b.dbg()
 
 
-class TestQuoteTick:
-    def test_large_allocation(self):
-        data = [Symbol("hello world") for _ in range(10000)]
-        send_list(data)
+def test_send():
+    data = [Symbol("hello world") for _ in range(1000000)]
+    Symbol.send(data)
 
-
-if __name__ == "__main__":
-    t = TestQuoteTick()
-
-    t.test_large_allocation()
+def test_receive():
+    items = Symbol.receive()
+    items[0].dbg()
+    items[-1].dbg()
+    print(len(items))
