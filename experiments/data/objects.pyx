@@ -49,6 +49,10 @@ cdef class InstrumentId:
 
     def debug(self):
         instrument_id_debug(&self._mem)
+        
+    @staticmethod
+    def from_string(symbol_str):
+        return InstrumentId.from_str(symbol_str)
 
     @staticmethod
     cdef InstrumentId from_str(str value):
