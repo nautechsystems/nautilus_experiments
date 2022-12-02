@@ -29,3 +29,12 @@ def test_from_string_value():
     instrument.debug()
     data = [QuoteTick(instrument) for _ in range(10000000)]
     data[-1].debug()
+
+def test_large_allocation():
+    for i in range(5):
+        instrument = InstrumentId.from_string("hello world")
+        instrument.debug()
+        data = [QuoteTick(instrument) for _ in range(20000000)]
+        data[-1].debug()
+        
+    gc.collect()
