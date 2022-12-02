@@ -14,13 +14,6 @@ pub struct Symbol {
 
 #[repr(C)]
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
-#[allow(clippy::box_collection)] // C ABI compatibility
-pub struct Venue {
-    value: Box<Rc<String>>,
-}
-
-#[repr(C)]
-#[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub struct InstrumentId {
     pub symbol: Symbol,
 }
@@ -83,9 +76,21 @@ pub extern "C" fn symbol_free(symbol: Symbol) {
 }
 
 #[no_mangle]
+pub extern "C" fn instrument_id_debug(instrument_id: &InstrumentId) {
+    dbg!(&instrument_id.symbol.value);
+    dbg!(Rc::strong_count(&instrument_id.symbol.value));
+}
+
+#[no_mangle]
 pub extern "C" fn quote_tick_debug(tick: &QuoteTick) {
     dbg!(&tick.instrument_id.symbol.value);
-    dbg!("{}", Rc::strong_count(&tick.instrument_id.symbol.value));
+    dbg!(Rc::strong_count(&tick.instrument_id.symbol.value));
+}
+
+#[no_mangle]
+pub extern "C" fn symbol_debug(symbol: &Symbol) {
+    dbg!(&symbol.value);
+    dbg!(Rc::strong_count(&symbol.value));
 }
 
 #[no_mangle]

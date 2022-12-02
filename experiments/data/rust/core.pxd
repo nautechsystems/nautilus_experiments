@@ -37,6 +37,10 @@ cdef extern from "core.h":
     # Frees the memory for the given `symbol` by dropping.
     void symbol_free(Symbol_t symbol);
 
+    void instrument_id_debug(const InstrumentId_t *instrument_id);
+
     void quote_tick_debug(const QuoteTick_t *tick);
+
+    void symbol_debug(const Symbol_t *symbol);
 
     void symbol_vec_text(void *data, uintptr_t len);

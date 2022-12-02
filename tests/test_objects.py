@@ -13,18 +13,13 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
-from experiments.data.objects import QuoteTick, InstrumentId
+from experiments.data.objects import QuoteTick, InstrumentId, Symbol
 import gc
 
-class TestQuoteTick:
-    def test_large_allocation(self):
-        instrument = InstrumentId("hello world")
-        data = [QuoteTick(instrument) for _ in range(10000)]
-        data[-1].debug()
-
-if __name__ == "__main__":
-    t = TestQuoteTick()
-    
-    for _ in range(1, 10):
-        t.test_large_allocation()
-        gc.collect()
+def test_string_value():
+    symbol = Symbol("hello world")
+    symbol.debug()
+    instrument = InstrumentId(symbol)
+    instrument.debug()
+    data = [QuoteTick(instrument) for _ in range(10000000)]
+    data[-1].debug()
