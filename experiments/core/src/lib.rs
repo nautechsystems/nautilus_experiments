@@ -34,9 +34,14 @@ pub extern "C" fn quote_tick_new(instrument_id: InstrumentId) -> QuoteTick {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn instrument_id_new(symbol_ptr: *mut ffi::PyObject) -> InstrumentId {
-    let symbol = symbol_new(symbol_ptr);
+pub unsafe extern "C" fn instrument_id_new_from_pystr(ptr: *mut ffi::PyObject) -> InstrumentId {
+    let symbol = symbol_new(ptr);
     InstrumentId { symbol }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn instrument_id_new(symbol: &Symbol) -> InstrumentId {
+    InstrumentId { symbol: symbol.clone() }
 }
 
 #[no_mangle]

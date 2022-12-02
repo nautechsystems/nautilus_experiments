@@ -10,6 +10,7 @@ from experiments.data.rust.core cimport Symbol_t
 from experiments.data.rust.core cimport instrument_id_clone
 from experiments.data.rust.core cimport instrument_id_free
 from experiments.data.rust.core cimport instrument_id_new
+from experiments.data.rust.core cimport instrument_id_new_from_pystr
 from experiments.data.rust.core cimport quote_tick_free
 from experiments.data.rust.core cimport quote_tick_new
 from experiments.data.rust.core cimport quote_tick_debug
@@ -39,7 +40,7 @@ cdef class QuoteTick:
 
 cdef class InstrumentId:
     def __init__(self, Symbol symbol not None):
-        self._mem = instrument_id_new(<PyObject *>symbol)
+        self._mem = instrument_id_new(&symbol._mem)
         self.symbol = symbol
 
     def __del__(self):
@@ -52,7 +53,7 @@ cdef class InstrumentId:
     @staticmethod
     cdef InstrumentId from_str(str value):
         cdef InstrumentId instrument_id = InstrumentId.__new__(InstrumentId)
-        instrument_id._mem = instrument_id_new(
+        instrument_id._mem = instrument_id_new_from_pystr(
             <PyObject *>value,
         )
         instrument_id.symbol = Symbol(value)

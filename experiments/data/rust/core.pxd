@@ -20,7 +20,9 @@ cdef extern from "core.h":
 
     QuoteTick_t quote_tick_new(InstrumentId_t instrument_id);
 
-    InstrumentId_t instrument_id_new(PyObject *symbol_ptr);
+    InstrumentId_t instrument_id_new_from_pystr(PyObject *ptr);
+
+    InstrumentId_t instrument_id_new(const Symbol_t *symbol);
 
     Symbol_t symbol_new(PyObject *ptr);
 
