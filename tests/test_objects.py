@@ -13,14 +13,18 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
-from experiments.data.objects import Symbol, create_vector
+from experiments.data.objects import QuoteTick, InstrumentId
+import gc
 
 class TestQuoteTick:
     def test_large_allocation(self):
-        data = [Symbol("hello world") for _ in range(10000)]
-        create_vector(data)
+        instrument = InstrumentId("hello world")
+        data = [QuoteTick(instrument) for _ in range(10000)]
+        data[-1].debug()
 
 if __name__ == "__main__":
     t = TestQuoteTick()
     
-    t.test_large_allocation()
+    for _ in range(1, 10):
+        t.test_large_allocation()
+        gc.collect()
