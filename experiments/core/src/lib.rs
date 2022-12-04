@@ -3,105 +3,84 @@ use std::rc::Rc;
 use std::slice;
 
 use pyo3::types::PyString;
-use pyo3::{ffi, FromPyPointer, Python};
+use pyo3::{ffi, FromPyPointer, IntoPyPointer, Py, Python};
+use std::fmt::{Debug, Display, Formatter, Result};
+use uuid::Uuid;
 
 #[repr(C)]
-#[derive(Clone, Hash, PartialEq, Eq, Debug)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 #[allow(clippy::box_collection)] // C ABI compatibility
-pub struct Symbol {
-    value: Box<Rc<String>>,
+pub struct UUID4 {
+    value: Box<String>,
 }
 
-#[repr(C)]
-#[derive(Clone, Hash, PartialEq, Eq, Debug)]
-pub struct InstrumentId {
-    pub symbol: Symbol,
-}
-/// Represents a single quote tick in a financial market.
-#[repr(C)]
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct QuoteTick {
-    pub instrument_id: InstrumentId,
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// C API
-////////////////////////////////////////////////////////////////////////////////
-
-#[no_mangle]
-pub extern "C" fn quote_tick_new(instrument_id: InstrumentId) -> QuoteTick {
-    QuoteTick { instrument_id }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn instrument_id_new_from_pystr(ptr: *mut ffi::PyObject) -> InstrumentId {
-    let symbol = symbol_new(ptr);
-    InstrumentId { symbol }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn instrument_id_new(symbol: &Symbol) -> InstrumentId {
-    InstrumentId { symbol: symbol.clone() }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn symbol_new(ptr: *mut ffi::PyObject) -> Symbol {
-    let v = Python::with_gil(|py| PyString::from_borrowed_ptr(py, ptr).to_string());
-    Symbol {
-        value: Box::new(Rc::new(v)),
+impl UUID4 {
+    pub fn new() -> UUID4 {
+        let uuid = Uuid::new_v4();
+        UUID4 {
+            value: Box::new(uuid.to_string()),
+        }
     }
 }
 
-#[no_mangle]
-pub extern "C" fn quote_tick_clone(tick: &QuoteTick) -> QuoteTick {
-    tick.clone()
+impl From<&str> for UUID4 {
+    fn from(s: &str) -> Self {
+        let uuid = Uuid::parse_str(s).unwrap();
+        UUID4 {
+            value: Box::new(uuid.to_string()),
+        }
+    }
+}
+
+/// Returns an owned string from a valid Python object pointer.
+///
+/// # Safety
+///
+/// - `ptr` must be borrowed from a valid Python UTF-8 `str`.
+#[inline(always)]
+pub unsafe fn pystr_to_string(ptr: *mut ffi::PyObject) -> String {
+    Python::with_gil(|py| PyString::from_borrowed_ptr(py, ptr).to_string())
+}
+
+/// Returns a pointer to a valid Python UTF-8 string.
+///
+/// # Safety
+///
+/// - Assumes that since the data is originating from Rust, the GIL does not need
+/// to be acquired.
+/// - Assumes you are immediately returning this pointer to Python.
+#[inline(always)]
+pub unsafe fn string_to_pystr(s: &str) -> *mut ffi::PyObject {
+    let py = Python::assume_gil_acquired();
+    let pystr: Py<PyString> = PyString::new(py, s).into();
+    pystr.into_ptr()
 }
 
 #[no_mangle]
-pub extern "C" fn instrument_id_clone(instrument_id: &InstrumentId) -> InstrumentId {
-    instrument_id.clone()
+pub unsafe extern "C" fn uuid4_from_pystr(ptr: *mut ffi::PyObject) -> UUID4 {
+    UUID4 {
+        value: Box::new(pystr_to_string(ptr)),
+    }
 }
 
-/// Frees the memory for the given `symbol` by dropping.
+/// Returns a pointer to a valid Python UTF-8 string.
+///
+/// # Safety
+///
+/// - Assumes that since the data is originating from Rust, the GIL does not need
+/// to be acquired.
+/// - Assumes you are immediately returning this pointer to Python.
 #[no_mangle]
-pub extern "C" fn quote_tick_free(tick: QuoteTick) {
-    drop(tick); // Memory freed here
-}
-
-/// Frees the memory for the given `symbol` by dropping.
-#[no_mangle]
-pub extern "C" fn instrument_id_free(instrument_id: InstrumentId) {
-    drop(instrument_id); // Memory freed here
-}
-
-/// Frees the memory for the given `symbol` by dropping.
-#[no_mangle]
-pub extern "C" fn symbol_free(symbol: Symbol) {
-    drop(symbol); // Memory freed here
+pub unsafe extern "C" fn uuid4_to_pystr(uuid: &UUID4) -> *mut ffi::PyObject {
+    string_to_pystr(uuid.value.as_str())
 }
 
 #[no_mangle]
-pub extern "C" fn instrument_id_debug(instrument_id: &InstrumentId) {
-    dbg!(&instrument_id.symbol.value);
-    dbg!(Rc::strong_count(&instrument_id.symbol.value));
+pub extern "C" fn uuid4_free(uuid4: UUID4) {
+    drop(uuid4); // Memory freed here
 }
 
 #[no_mangle]
-pub extern "C" fn quote_tick_debug(tick: &QuoteTick) {
-    dbg!(&tick.instrument_id.symbol.value);
-    dbg!(Rc::strong_count(&tick.instrument_id.symbol.value));
-}
-
-#[no_mangle]
-pub extern "C" fn symbol_debug(symbol: &Symbol) {
-    dbg!(&symbol.value);
-    dbg!(Rc::strong_count(&symbol.value));
-}
-
-#[no_mangle]
-pub extern "C" fn symbol_vec_text(data: *mut c_void, len: usize) {
-    let data: &[Symbol] = unsafe { slice::from_raw_parts(data as *const Symbol, len) };
-    let v = &data[len - 1];
-    dbg!(Rc::strong_count(&v.value));
-    dbg!(len, &data[len - 1]);
+pub extern "C" fn uuid4_new() -> UUID4 {
+    UUID4::new()
 }

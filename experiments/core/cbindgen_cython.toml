@@ -18,6 +18,4 @@ header = '"core.h"'
 ]
 
 [export.rename]
-"QuoteTick" = "QuoteTick_t"
-"InstrumentId" = "InstrumentId_t"
-"Symbol" = "Symbol_t"
+"UUID4" = "UUID4_t"

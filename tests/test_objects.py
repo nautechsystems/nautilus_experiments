@@ -13,28 +13,12 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
-from experiments.data.objects import QuoteTick, InstrumentId, Symbol
+from experiments.data.objects import UUID4
 import gc
-
-def test_string_value():
-    symbol = Symbol("hello world")
-    symbol.debug()
-    instrument = InstrumentId(symbol)
-    instrument.debug()
-    data = [QuoteTick(instrument) for _ in range(10000000)]
-    data[-1].debug()
-
-def test_from_string_value():
-    instrument = InstrumentId.from_string("hello world")
-    instrument.debug()
-    data = [QuoteTick(instrument) for _ in range(10000000)]
-    data[-1].debug()
 
 def test_large_allocation():
     for i in range(5):
-        instrument = InstrumentId.from_string("hello world")
-        instrument.debug()
-        data = [QuoteTick(instrument) for _ in range(20000000)]
-        data[-1].debug()
+        data = [UUID4("hello world") for _ in range(20000000)]
+        print(data[-1])
         
     gc.collect()
