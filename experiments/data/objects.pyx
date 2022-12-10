@@ -1,41 +1,73 @@
 from cpython.object cimport PyObject
 
+from experiments.data.rust.core cimport UUID4_t
+from experiments.data.rust.core cimport uuid4_clone
+from experiments.data.rust.core cimport uuid4_eq
 from experiments.data.rust.core cimport uuid4_free
 from experiments.data.rust.core cimport uuid4_from_pystr
+from experiments.data.rust.core cimport uuid4_hash
 from experiments.data.rust.core cimport uuid4_new
 from experiments.data.rust.core cimport uuid4_to_pystr
 
+
 cdef class UUID4:
-    def __init__(self, str value=None):
+    """
+    Represents a pseudo-random UUID (universally unique identifier)
+    version 4 based on a 128-bit label as specified in RFC 4122.
+
+    Parameters
+    ----------
+    value : str, optional
+        The UUID value. If ``None`` then a value will be generated.
+
+    Warnings
+    --------
+    - Panics at runtime if `value` is not ``None`` and not a valid UUID.
+
+    References
+    ----------
+    https://en.wikipedia.org/wiki/Universally_unique_identifier
+    """
+
+    def __init__(self, str value = None):
         if value is None:
             # Create a new UUID4 from Rust
-            self._uuid4 = uuid4_new()  # `UUID4_t` owned from Rust
-            self.value = <str>uuid4_to_pystr(&self._uuid4)  # `PyUnicode` owned from Rust
+            self._mem = uuid4_new()  # `UUID4_t` owned from Rust
         else:
-            self._uuid4 = self._uuid4_from_pystr(value)
-            self.value = value
+            # `value` borrowed by Rust, `UUID4_t` owned from Rust
+            self._mem = uuid4_from_pystr(<PyObject *>value)
 
-    cdef UUID4_t _uuid4_from_pystr(self, str value) except *:
-        return uuid4_from_pystr(<PyObject *>value)  # `value` borrowed by Rust, `UUID4_t` owned from Rust
+    cdef str to_str(self):
+        return <str>uuid4_to_pystr(&self._mem)
 
     def __del__(self) -> None:
-        uuid4_free(self._uuid4)  # `self._uuid4` moved to Rust (then dropped)
+        if self._mem.value != NULL:
+            uuid4_free(self._mem)  # `self._mem` moved to Rust (then dropped)
 
     def __getstate__(self):
-        return self.value
+        return self.to_str()
 
     def __setstate__(self, state):
-        self._uuid4 = self._uuid4_from_pystr(state)
-        self.value = state
+        self._mem = uuid4_from_pystr(<PyObject *>state)
 
     def __eq__(self, UUID4 other) -> bool:
-        return self.value == other.value
+        return uuid4_eq(&self._mem, &other._mem)
 
     def __hash__(self) -> int:
-        return hash(self.value)
+        return uuid4_hash(&self._mem)
 
     def __str__(self) -> str:
-        return self.value
+        return self.to_str()
 
     def __repr__(self) -> str:
-        return f"{type(self).__name__}('{self.value}')"
+        return f"{type(self).__name__}('{self}')"
+
+    @property
+    def value(self) -> str:
+        return self.to_str()
+
+    @staticmethod
+    cdef UUID4 from_mem_c(UUID4_t mem):
+        cdef UUID4 uuid4 = UUID4.__new__(UUID4)
+        uuid4._mem = uuid4_clone(&mem)
+        return uuid4

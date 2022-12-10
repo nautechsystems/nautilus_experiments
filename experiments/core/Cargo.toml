@@ -9,8 +9,8 @@ name = "core"
 crate-type = ["rlib", "staticlib"]
 
 [dependencies]
-pyo3 = { version = "0.17.2" }
-uuid = { version = "^0.8.2", features = ["v4"] }
+pyo3 = { version = "0.17.3" }
+uuid = { version = "1.2.2", features = ["v4"] }
 
 [features]
 extension-module = ["pyo3/extension-module"]
