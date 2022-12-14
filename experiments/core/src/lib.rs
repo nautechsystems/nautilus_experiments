@@ -64,12 +64,7 @@ pub extern "C" fn uuid4_free(uuid4: UUID4) {
 #[no_mangle]
 pub unsafe extern "C" fn uuid4_from_pystr(ptr: *mut ffi::PyObject) -> UUID4 {
     UUID4::from(
-        {
-            let ptr = ptr;
-            assert!(!ptr.is_null(), "pointer was NULL");
-            Python::with_gil(|py| PyString::from_borrowed_ptr(py, ptr).to_string())
-        }
-        .as_str(),
+        { Python::with_gil(|py| PyString::from_borrowed_ptr(py, ptr).to_string()) }.as_str(),
     )
 }
 
@@ -82,9 +77,10 @@ pub unsafe extern "C" fn uuid4_from_pystr(ptr: *mut ffi::PyObject) -> UUID4 {
 #[no_mangle]
 pub unsafe extern "C" fn uuid4_to_pystr(uuid: &UUID4) -> *mut ffi::PyObject {
     let s = uuid.value.as_str();
-    let py = Python::assume_gil_acquired();
-    let pystr: Py<PyString> = PyString::new(py, s).into();
-    pystr.into_ptr()
+    Python::with_gil(|py| {
+        let pystr: Py<PyString> = PyString::new(py, s).into();
+        pystr.into_ptr()
+    })
 }
 
 #[no_mangle]

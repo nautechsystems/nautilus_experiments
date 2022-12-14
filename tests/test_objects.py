@@ -16,53 +16,61 @@
 from experiments.data.objects import UUID4
 import gc
 
+def test_large_unique_allocation():
+    for i in range(1):
+        data = [UUID4("550e8400-e29b-41d4-a716-446655" + str(n).zfill(6)) for n in range(4000)]
+        print(data[-1])
+        
+    gc.collect()
+
 def test_large_allocation():
     for i in range(5):
-        data = [UUID4("550e8400-e29b-41d4-a716-446655440000") for _ in range(400000)]
+        data = [UUID4("550e8400-e29b-41d4-a716-446655440000") for n in range(400000)]
         print(data[-1])
         
     gc.collect()
 
 def test_large_printing():
-    for i in range(5000):
-        print(UUID4("550e8400-e29b-41d4-a716-446655440000"))
-        
+    for _ in range(5):
+        for n in range(1000000):
+            print(UUID4("550e8400-e29b-41d4-a716-44665544" + str(n % 10000).zfill(4)))
+        gc.collect()
     gc.collect()
 
 def test_large_pickling():
     import pickle
     uuid = UUID4("550e8400-e29b-41d4-a716-446655440000")
     uuid_obj = pickle.dumps(uuid)
-    for i in range(5000):
-        print(pickle.loads(uuid_obj))
-
-    gc.collect()
-
+    for _ in range(5):
+        for _ in range(1000):
+            print(pickle.loads(uuid_obj))
+        gc.collect()
 
 import sys
 import tracemalloc
 if __name__ == "__main__":
-    # tracemalloc.start()
-    # snap1 = tracemalloc.take_snapshot()
+    tracemalloc.start()
+    snap1 = tracemalloc.take_snapshot()
 
-    # old_stdout = sys.stdout
-    # f = open('/dev/null', 'w')
-    # sys.stdout = f
-    test_large_allocation()
-    # sys.stdout = old_stdout
+    old_stdout = sys.stdout
+    f = open('/dev/null', 'w')
+    sys.stdout = f
+    test_large_unique_allocation()
+    f.close()
+    sys.stdout = old_stdout
 
-    # snap2 = tracemalloc.take_snapshot()
+    snap2 = tracemalloc.take_snapshot()
 
-    # top_stats = snap2.compare_to(snap1, 'lineno')
+    top_stats = snap2.compare_to(snap1, 'lineno')
 
-    # print("[ Top 10 differences ]")
-    # for stat in top_stats[:10]:
-    #     print(stat)
+    print("[ Top 10 differences ]")
+    for stat in top_stats[:10]:
+        print(stat)
 
-    # top_stats = snap2.statistics('traceback')
+    top_stats = snap2.statistics('traceback')
 
-    # # pick the biggest memory block
-    # stat = top_stats[0]
-    # print("%s memory blocks: %.1f KiB" % (stat.count, stat.size / 1024))
-    # for line in stat.traceback.format():
-    #     print(line)
+    # pick the biggest memory block
+    stat = top_stats[0]
+    print("%s memory blocks: %.1f KiB" % (stat.count, stat.size / 1024))
+    for line in stat.traceback.format():
+        print(line)
