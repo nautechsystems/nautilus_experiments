@@ -3,7 +3,7 @@ use std::fmt::{Debug, Display, Formatter, Result};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
-use pyo3::types::PyString;
+use pyo3::types::{PyString, PyUnicode};
 use pyo3::{ffi, FromPyPointer, IntoPyPointer, Py, Python};
 
 use uuid::Uuid;

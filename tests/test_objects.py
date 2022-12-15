@@ -32,8 +32,9 @@ def test_large_allocation():
 
 def test_large_printing():
     for _ in range(5):
-        for n in range(1000000):
-            print(UUID4("550e8400-e29b-41d4-a716-44665544" + str(n % 10000).zfill(4)))
+        for n in range(10000):
+            a = UUID4("550e8400-e29b-41d4-a716-44665544" + str(n % 10000).zfill(4))
+            print(a)
         gc.collect()
     gc.collect()
 
@@ -55,7 +56,8 @@ if __name__ == "__main__":
     old_stdout = sys.stdout
     f = open('/dev/null', 'w')
     sys.stdout = f
-    test_large_unique_allocation()
+    test_large_printing()
+    gc.collect()
     f.close()
     sys.stdout = old_stdout
 
