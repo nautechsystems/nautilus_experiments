@@ -38,7 +38,7 @@ cdef class UUID4:
             self._mem = uuid4_from_pystr(<PyObject *>value)
 
     cdef str to_str(self):
-        return <str>uuid4_to_pystr(&self._mem)
+        return pyobj_to_str(uuid4_to_pystr(&self._mem))
 
     def __del__(self) -> None:
         if self._mem.value != NULL:
