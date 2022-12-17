@@ -11,6 +11,11 @@ cdef extern from "core.h":
     cdef struct UUID4_t:
         Rc_String *value;
 
+    cdef struct CVec:
+        void *ptr;
+        uintptr_t len;
+        uintptr_t cap;
+
     UUID4_t uuid4_new();
 
     UUID4_t uuid4_clone(const UUID4_t *uuid4);
@@ -34,3 +39,8 @@ cdef extern from "core.h":
     uint8_t uuid4_eq(const UUID4_t *lhs, const UUID4_t *rhs);
 
     uint64_t uuid4_hash(const UUID4_t *uuid);
+
+    CVec cvec_new();
+
+    # Specialize to UUID4 for test
+    void cvec_free(CVec cvec);

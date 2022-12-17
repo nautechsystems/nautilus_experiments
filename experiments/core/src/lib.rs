@@ -3,9 +3,13 @@ use std::fmt::{Debug, Display, Formatter, Result};
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
-use pyo3::types::{PyString, PyUnicode};
-use pyo3::{ffi, FromPyPointer, IntoPyPointer, Py, Python};
+use pyo3::prelude::*;
+use pyo3::types::{PyCapsule, PyString};
+use pyo3::{
+    ffi, pyfunction, FromPyPointer, IntoPyPointer, Py, PyObject, PyResult, Python, ToPyObject,
+};
 
+use std::{ffi::c_void, ptr::null};
 use uuid::Uuid;
 
 #[repr(C)]
@@ -93,4 +97,86 @@ pub extern "C" fn uuid4_hash(uuid: &UUID4) -> u64 {
     let mut h = DefaultHasher::new();
     uuid.hash(&mut h);
     h.finish()
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct CVec {
+    pub ptr: *mut c_void,
+    pub len: usize,
+    pub cap: usize,
+}
+
+unsafe impl Send for CVec {}
+
+impl CVec {
+    pub fn default() -> Self {
+        CVec {
+            ptr: null() as *const bool as *mut c_void,
+            len: 0,
+            cap: 0,
+        }
+    }
+}
+
+/// Consumes and leaks the Vec, returning a mutable pointer to the contents as
+/// a 'CVec'. The memory has been leaked and now exists for the lifetime of the
+/// program unless dropped manually.
+/// Note: drop the memory by reconstructing the vec using from_raw_parts method
+/// as shown in the test below.
+impl<T> From<Vec<T>> for CVec {
+    fn from(data: Vec<T>) -> Self {
+        if data.is_empty() {
+            CVec::default()
+        } else {
+            let len = data.len();
+            let cap = data.capacity();
+            CVec {
+                ptr: &mut data.leak()[0] as *mut T as *mut c_void,
+                len,
+                cap,
+            }
+        }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// C API
+////////////////////////////////////////////////////////////////////////////////
+
+#[no_mangle]
+pub extern "C" fn cvec_new() -> CVec {
+    CVec::default()
+}
+
+#[no_mangle]
+/// Specialize to UUID4 for test
+pub extern "C" fn cvec_free(cvec: CVec) {
+    let CVec { ptr, len, cap } = cvec;
+    let data: Vec<UUID4> = unsafe { Vec::from_raw_parts(ptr as *mut UUID4, len, cap) };
+    drop(data) // Memory freed here
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Python API
+////////////////////////////////////////////////////////////////////////////////
+
+#[pyfunction]
+fn generate_data(len: u32) -> PyObject {
+    let data: CVec = (0..len)
+        .into_iter()
+        .map(|_| UUID4::new())
+        .collect::<Vec<UUID4>>()
+        .into();
+
+    Python::with_gil(|py| {
+        let a = PyCapsule::new(py, data, None).unwrap();
+        a.to_object(py)
+    })
+}
+
+#[pymodule]
+fn core(_: Python<'_>, m: &PyModule) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(generate_data, m)?)?;
+    Ok(())
 }

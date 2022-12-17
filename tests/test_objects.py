@@ -14,41 +14,19 @@
 # -------------------------------------------------------------------------------------------------
 
 from experiments.data.objects import UUID4
+import core
 import gc
 
-def test_large_unique_allocation():
-    for i in range(1):
-        data = [UUID4("550e8400-e29b-41d4-a716-446655" + str(n).zfill(6)) for n in range(4000)]
-        print(data[-1])
-        
-    gc.collect()
-
-def test_large_allocation():
-    for i in range(5):
-        data = [UUID4("550e8400-e29b-41d4-a716-446655440000") for n in range(400000)]
-        print(data[-1])
-        
-    gc.collect()
-
-def test_large_printing():
-    for _ in range(5):
-        for n in range(10000):
-            a = UUID4("550e8400-e29b-41d4-a716-44665544" + str(n % 10000).zfill(4))
-            print(a)
-        gc.collect()
-    gc.collect()
-
-def test_large_pickling():
-    import pickle
-    uuid = UUID4("550e8400-e29b-41d4-a716-446655440000")
-    uuid_obj = pickle.dumps(uuid)
-    for _ in range(5):
-        for _ in range(1000):
-            print(pickle.loads(uuid_obj))
+def test_gen_data():
+    for _ in range(1):
+        data = core.generate_data(1)
+        uuid_list = UUID4.from_capsule(data)
+        for uuid in uuid_list:
+            print(uuid)
         gc.collect()
 
-import sys
 import tracemalloc
+import sys
 if __name__ == "__main__":
     tracemalloc.start()
     snap1 = tracemalloc.take_snapshot()
@@ -56,7 +34,7 @@ if __name__ == "__main__":
     old_stdout = sys.stdout
     f = open('/dev/null', 'w')
     sys.stdout = f
-    test_large_printing()
+    test_gen_data()
     gc.collect()
     f.close()
     sys.stdout = old_stdout
@@ -74,5 +52,5 @@ if __name__ == "__main__":
     # pick the biggest memory block
     stat = top_stats[0]
     print("%s memory blocks: %.1f KiB" % (stat.count, stat.size / 1024))
-    for line in stat.traceback.format():
+    for line in stat.traceback.format():  # seg fault on format?????? Why??
         print(line)

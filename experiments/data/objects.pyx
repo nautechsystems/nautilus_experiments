@@ -1,4 +1,5 @@
 from cpython.object cimport PyObject
+from cpython.pycapsule cimport PyCapsule_GetPointer
 
 from experiments.data.rust.core cimport UUID4_t
 from experiments.data.rust.core cimport uuid4_clone
@@ -8,6 +9,8 @@ from experiments.data.rust.core cimport uuid4_from_pystr
 from experiments.data.rust.core cimport uuid4_hash
 from experiments.data.rust.core cimport uuid4_new
 from experiments.data.rust.core cimport uuid4_to_pystr
+from experiments.data.rust.core cimport CVec
+from experiments.data.rust.core cimport cvec_free
 
 
 cdef class UUID4:
@@ -65,9 +68,26 @@ cdef class UUID4:
     @property
     def value(self) -> str:
         return self.to_str()
+        
+    def from_capsule(capsule):
+        return UUID4.from_capsule_cvec(capsule)
 
     @staticmethod
     cdef UUID4 from_mem_c(UUID4_t mem):
         cdef UUID4 uuid4 = UUID4.__new__(UUID4)
         uuid4._mem = uuid4_clone(&mem)
         return uuid4
+
+    @staticmethod
+    cdef list from_capsule_cvec(object capsule):
+        cdef CVec* data = <CVec*> PyCapsule_GetPointer(capsule, NULL)
+        cdef UUID4_t* ptr = <UUID4_t*> data.ptr
+        cdef int len = data.len
+        cdef list ticks = []
+
+        for i in range(0, len):
+            ticks.append(UUID4.from_mem_c(ptr[i]))
+
+        cvec_free(data[0])
+
+        return ticks
