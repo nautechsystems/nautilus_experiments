@@ -4,8 +4,6 @@ from libc.stdio cimport printf
 from experiments.data.rust.core cimport symbol_new
 from experiments.data.rust.core cimport symbol_free
 from experiments.data.rust.core cimport symbol_debug
-from experiments.data.rust.core cimport symbol_vec_text
-from experiments.data.rust.core cimport Symbol_t
 
 from experiments.data.rust.core cimport instrument_id_clone
 from experiments.data.rust.core cimport instrument_id_free
@@ -15,6 +13,7 @@ from experiments.data.rust.core cimport quote_tick_free
 from experiments.data.rust.core cimport quote_tick_new
 from experiments.data.rust.core cimport quote_tick_debug
 from experiments.data.rust.core cimport instrument_id_debug
+
 
 cdef class Symbol:
     def __init__(self, str value not None):

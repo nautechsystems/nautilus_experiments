@@ -1,3 +1,5 @@
+mod string;
+
 use std::ffi::c_void;
 use std::rc::Rc;
 use std::slice;

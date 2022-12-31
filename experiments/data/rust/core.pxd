@@ -46,3 +46,10 @@ cdef extern from "core.h":
     void symbol_debug(const Symbol_t *symbol);
 
     void symbol_vec_text(void *data, uintptr_t len);
+
+    # Drops the C string memory at the pointer.
+    #
+    # # Safety
+    # - Panics if `ptr` is null.
+    # - Assumes `ptr` is a valid C string pointer.
+    void cstr_free(const char *ptr);

@@ -2,7 +2,6 @@ from experiments.data.rust.core cimport Symbol_t
 from experiments.data.rust.core cimport QuoteTick_t
 from experiments.data.rust.core cimport InstrumentId_t
 
-from libc.stdint cimport uint64_t
 
 cdef class Symbol:
     cdef Symbol_t _mem
