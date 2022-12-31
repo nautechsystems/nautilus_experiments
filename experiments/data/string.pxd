@@ -7,7 +7,7 @@ from experiments.data.rust.core cimport cstr_free
 
 cdef inline str cstr_to_pystr(const char* ptr):
     cdef str obj = PyUnicode_FromString(ptr)
-    cstr_free(ptr)
+    # cstr_free(ptr)
     return obj
 
 
