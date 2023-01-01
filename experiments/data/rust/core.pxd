@@ -26,6 +26,11 @@ cdef extern from "core.h":
 
     Symbol_t symbol_new(PyObject *ptr);
 
+    Symbol_t symbol_new_from_cstr(const char *ptr);
+
+    # Returns a [Symbol] as a C string pointer.
+    const char *symbol_to_cstr(const Symbol_t *symbol);
+
     QuoteTick_t quote_tick_clone(const QuoteTick_t *tick);
 
     InstrumentId_t instrument_id_clone(const InstrumentId_t *instrument_id);

@@ -1,11 +1,12 @@
 mod string;
 
-use std::ffi::c_void;
+use std::ffi::{c_char, c_void, CStr};
 use std::rc::Rc;
 use std::slice;
 
 use pyo3::types::PyString;
 use pyo3::{ffi, FromPyPointer, Python};
+use crate::string::string_to_cstr;
 
 #[repr(C)]
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
@@ -52,6 +53,19 @@ pub unsafe extern "C" fn symbol_new(ptr: *mut ffi::PyObject) -> Symbol {
     Symbol {
         value: Box::new(Rc::new(v)),
     }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn symbol_new_from_cstr(ptr: *const c_char) -> Symbol {
+    Symbol {
+        value: Box::new(Rc::new(CStr::from_ptr(ptr).to_str().expect("CStr::from_ptr failed").to_string()))
+    }
+}
+
+/// Returns a [Symbol] as a C string pointer.
+#[no_mangle]
+pub extern "C" fn symbol_to_cstr(symbol: &Symbol) -> *const c_char {
+    string_to_cstr(symbol.value.as_str())
 }
 
 #[no_mangle]

@@ -6,8 +6,12 @@ from experiments.data.rust.core cimport InstrumentId_t
 cdef class Symbol:
     cdef Symbol_t _mem
 
+    cdef str to_str(self)
+
+
 cdef class QuoteTick:
     cdef QuoteTick_t _mem
+
 
 cdef class InstrumentId:
     cdef InstrumentId_t _mem
