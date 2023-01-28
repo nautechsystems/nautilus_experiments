@@ -13,8 +13,12 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
-from experiments.data.objects import UUID4
+import sys
 import gc
+import tracemalloc
+
+from experiments.data.objects import UUID4
+
 
 def test_large_unique_allocation():
     for i in range(1):
@@ -23,12 +27,14 @@ def test_large_unique_allocation():
         
     gc.collect()
 
+
 def test_large_allocation():
     for i in range(5):
         data = [UUID4("550e8400-e29b-41d4-a716-446655440000") for n in range(400000)]
         print(data[-1])
         
     gc.collect()
+
 
 def test_large_printing():
     for _ in range(5):
@@ -37,6 +43,7 @@ def test_large_printing():
             print(a)
         gc.collect()
     gc.collect()
+
 
 def test_large_pickling():
     import pickle
@@ -47,8 +54,7 @@ def test_large_pickling():
             print(pickle.loads(uuid_obj))
         gc.collect()
 
-import sys
-import tracemalloc
+
 if __name__ == "__main__":
     tracemalloc.start()
     snap1 = tracemalloc.take_snapshot()

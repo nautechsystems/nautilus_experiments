@@ -8,6 +8,7 @@ from experiments.data.rust.core cimport uuid4_from_pystr
 from experiments.data.rust.core cimport uuid4_hash
 from experiments.data.rust.core cimport uuid4_new
 from experiments.data.rust.core cimport uuid4_to_pystr
+from experiments.data.string cimport pyobj_to_str
 
 
 cdef class UUID4:
@@ -37,9 +38,6 @@ cdef class UUID4:
             # `value` borrowed by Rust, `UUID4_t` owned from Rust
             self._mem = uuid4_from_pystr(<PyObject *>value)
 
-    cdef str to_str(self):
-        return pyobj_to_str(uuid4_to_pystr(&self._mem))
-
     def __del__(self) -> None:
         if self._mem.value != NULL:
             uuid4_free(self._mem)  # `self._mem` moved to Rust (then dropped)
@@ -61,6 +59,9 @@ cdef class UUID4:
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}('{self}')"
+
+    cdef str to_str(self):
+        return pyobj_to_str(uuid4_to_pystr(&self._mem))
 
     @property
     def value(self) -> str:
