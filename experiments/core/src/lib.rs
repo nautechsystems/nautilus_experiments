@@ -1,4 +1,4 @@
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 
 #[repr(C)]
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
@@ -25,6 +25,12 @@ impl Deref for OrderInitialized {
     }
 }
 
+impl DerefMut for OrderInitialized {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.order
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub struct OrderExpired {
@@ -39,6 +45,13 @@ impl Deref for OrderExpired {
         &self.order
     }
 }
+
+impl DerefMut for OrderExpired {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.order
+    }
+}
+
 
 
 mod tests {
@@ -61,7 +74,7 @@ mod tests {
         assert_eq!(expired.reconcilliation, 2);
         
         // mutate through order attribute only
-        expired.order.trader_id = "oh no".to_string();
+        expired.trader_id = "oh no".to_string();
         expired.reconcilliation = 3;
         
         assert_eq!(expired.trader_id, "oh no");
@@ -86,7 +99,7 @@ mod tests {
         assert_eq!(init.trailing_offset, Some(2));
 
         // mutate through order attribute only
-        init.order.trader_id = "oh no".to_string();
+        init.trader_id = "oh no".to_string();
         init.trailing_offset = Some(7);
         
         assert_eq!(init.trader_id, "oh no");
