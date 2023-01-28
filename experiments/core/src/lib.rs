@@ -9,26 +9,30 @@ pub struct Order {
     pub ts_init: u64,
 }
 
+macro_rules! impl_derefs_for_order {
+    ($struct: ident) => {
+        impl Deref for $struct {
+            type Target = Order;
+
+            fn deref(&self) -> &Self::Target {
+                &self.order
+            }
+        }
+
+        impl DerefMut for $struct {
+            fn deref_mut(&mut self) -> &mut Self::Target {
+                &mut self.order
+            }
+        }
+    };
+}
+
 #[repr(C)]
 #[derive(Clone, Hash, PartialEq, Eq, Debug)]
 pub struct OrderInitialized {
     pub order: Order,
     pub trailing_offset: Option<u64>,
     pub trailing_offset_type: Option<u64>,
-}
-
-impl Deref for OrderInitialized {
-    type Target = Order;
-
-    fn deref(&self) -> &Self::Target {
-        &self.order
-    }
-}
-
-impl DerefMut for OrderInitialized {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.order
-    }
 }
 
 #[repr(C)]
@@ -38,20 +42,8 @@ pub struct OrderExpired {
     pub reconcilliation: u64,
 }
 
-impl Deref for OrderExpired {
-    type Target = Order;
-
-    fn deref(&self) -> &Self::Target {
-        &self.order
-    }
-}
-
-impl DerefMut for OrderExpired {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.order
-    }
-}
-
+impl_derefs_for_order!(OrderInitialized);
+impl_derefs_for_order!(OrderExpired);
 
 
 mod tests {
