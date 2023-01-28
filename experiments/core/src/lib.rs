@@ -31,8 +31,13 @@ mod tests {
             ts_init: 1,
             reconcilliation: 2,
         };
+
+        assert_eq!(expired.ts_event, 1);
+        assert_eq!(expired.trader_id, "hi");
+        assert_eq!(expired.reconcilliation, 2);
     }
 
+    #[test]
     fn build_initialized_order() {
         let mut init = OrderInitialized {
             trader_id: "hi".to_string(),
@@ -42,5 +47,9 @@ mod tests {
             trailing_offset: Some(2),
             trailing_offset_type: Some(3),
         };
+
+        assert_eq!(init.ts_event, 1);
+        assert_eq!(init.trader_id, "hi");
+        assert_eq!(init.trailing_offset, Some(2));
     }
 }
