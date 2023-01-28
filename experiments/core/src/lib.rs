@@ -59,6 +59,13 @@ mod tests {
         assert_eq!(expired.ts_event, 1);
         assert_eq!(expired.trader_id, "hi");
         assert_eq!(expired.reconcilliation, 2);
+        
+        // mutate through order attribute only
+        expired.order.trader_id = "oh no".to_string();
+        expired.reconcilliation = 3;
+        
+        assert_eq!(expired.trader_id, "oh no");
+        assert_eq!(expired.reconcilliation, 3);
     }
 
     #[test]
@@ -77,5 +84,12 @@ mod tests {
         assert_eq!(init.ts_event, 1);
         assert_eq!(init.trader_id, "hi");
         assert_eq!(init.trailing_offset, Some(2));
+
+        // mutate through order attribute only
+        init.order.trader_id = "oh no".to_string();
+        init.trailing_offset = Some(7);
+        
+        assert_eq!(init.trader_id, "oh no");
+        assert_eq!(init.trailing_offset, Some(7));
     }
 }
