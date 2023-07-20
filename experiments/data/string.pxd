@@ -34,7 +34,7 @@ cdef extern from "Python.h":
     const char* PyUnicode_AsUTF8AndSize(object unicode, Py_ssize_t *size)  # noqa
 
 
-cdef inline str cstr_to_pystr(const char* ptr):
+cdef inline str ustr_to_pystr(const char* ptr):
     return PyUnicode_FromString(ptr)
 
 

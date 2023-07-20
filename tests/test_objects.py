@@ -15,42 +15,20 @@
 
 import pickle
 
-from experiments.data.objects import QuoteTick, InstrumentId, Symbol, Venue
+from experiments.data.objects import TradeTick, TradeId
 
-def test_pickling_symbol():
-    data = Symbol("Hello world")
+def test_pickling_tradeid():
+    data = TradeId("Hello world")
     
     pickled = pickle.dumps(data)
     unpickled = pickle.loads(pickled)
 
     assert data == unpickled
 
-def test_pickling_symbol():
-    data = Venue("Hello world")
+def test_pickling_trade():
+    data = TradeTick(TradeId("Hello world"), 0, 0)
     
     pickled = pickle.dumps(data)
     unpickled = pickle.loads(pickled)
 
     assert data == unpickled
-
-def test_pickling_instrument():
-    data = InstrumentId.from_string("Hello.World")
-    
-    pickled = pickle.dumps(data)
-    unpickled = pickle.loads(pickled)
-
-    assert data == unpickled
-
-def test_pickling_quote():
-    venue = Venue("Something")
-    instrument = InstrumentId(
-        symbol = Symbol("hello world"),
-        venue = venue
-    )
-    data = QuoteTick(instrument)
-    
-    pickled = pickle.dumps(data)
-    unpickled = pickle.loads(pickled)
-
-    assert data == unpickled
-    assert data.instrument_id == unpickled.instrument_id
