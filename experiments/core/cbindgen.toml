@@ -7,7 +7,8 @@ no_includes = true
 tab_width = 4
 
 [export.rename]
+"Ustr" = "char*"
 "QuoteTick" = "QuoteTick_t"
+"Venue" = "Venue_t"
 "InstrumentId" = "InstrumentId_t"
 "Symbol" = "Symbol_t"
-

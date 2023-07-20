@@ -13,32 +13,44 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
-import gc
+import pickle
 
-from experiments.data.objects import QuoteTick, InstrumentId, Symbol
+from experiments.data.objects import QuoteTick, InstrumentId, Symbol, Venue
 
+def test_pickling_symbol():
+    data = Symbol("Hello world")
+    
+    pickled = pickle.dumps(data)
+    unpickled = pickle.loads(pickled)
 
-def test_string_value():
-    symbol = Symbol("hello world")
-    symbol.debug()
-    instrument = InstrumentId(symbol)
-    instrument.debug()
-    data = [QuoteTick(instrument) for _ in range(10000000)]
-    data[-1].debug()
+    assert data == unpickled
 
+def test_pickling_symbol():
+    data = Venue("Hello world")
+    
+    pickled = pickle.dumps(data)
+    unpickled = pickle.loads(pickled)
 
-def test_from_string_value():
-    instrument = InstrumentId.from_string("hello world")
-    instrument.debug()
-    data = [QuoteTick(instrument) for _ in range(10000000)]
-    data[-1].debug()
+    assert data == unpickled
 
+def test_pickling_instrument():
+    data = InstrumentId.from_string("Hello.World")
+    
+    pickled = pickle.dumps(data)
+    unpickled = pickle.loads(pickled)
 
-def test_large_allocation():
-    for i in range(5):
-        instrument = InstrumentId.from_string("hello world")
-        instrument.debug()
-        data = [QuoteTick(instrument) for _ in range(20000000)]
-        data[-1].debug()
-        
-    gc.collect()
+    assert data == unpickled
+
+def test_pickling_quote():
+    venue = Venue("Something")
+    instrument = InstrumentId(
+        symbol = Symbol("hello world"),
+        venue = venue
+    )
+    data = QuoteTick(instrument)
+    
+    pickled = pickle.dumps(data)
+    unpickled = pickle.loads(pickled)
+
+    assert data == unpickled
+    assert data.instrument_id == unpickled.instrument_id

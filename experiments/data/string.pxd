@@ -13,9 +13,6 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
-from experiments.data.rust.core cimport cstr_free
-
-
 cdef extern from "Python.h":
     # Similar to PyUnicode_FromUnicode(), but u points to null-terminated
     # UTF-8 encoded bytes. The size is determined with strlen().
@@ -38,12 +35,7 @@ cdef extern from "Python.h":
 
 
 cdef inline str cstr_to_pystr(const char* ptr):
-    cdef str obj = PyUnicode_FromString(ptr)
-
-    # Assumes `ptr` was created from Rust `CString::from_raw`,
-    # otherwise will lead to undefined behaviour when passed to `cstr_free`.
-    cstr_free(ptr)
-    return obj
+    return PyUnicode_FromString(ptr)
 
 
 cdef inline const char* pystr_to_cstr(str value) except *:

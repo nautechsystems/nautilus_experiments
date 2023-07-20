@@ -10,6 +10,7 @@ crate-type = ["rlib", "staticlib"]
 
 [dependencies]
 pyo3 = { version = "0.17.2" }
+ustr = "0.10.0"
 
 [features]
 extension-module = ["pyo3/extension-module"]
