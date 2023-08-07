@@ -4,18 +4,4 @@ from cpython.object cimport PyObject
 from libc.stdint cimport uint64_t, uint8_t
 
 cdef extern from "core.h":
-
-    cdef struct TradeId_t:
-        char* value;
-
-    # Represents a single quote tick in a financial market.
-    cdef struct TradeTick_t:
-        TradeId_t trade_id;
-        uint64_t ts_event;
-        uint64_t ts_init;
-
-    TradeTick_t trade_tick_new(TradeId_t trade_id, uint64_t ts_event, uint64_t ts_init);
-
-    uint8_t trade_tick_eq(const TradeTick_t *lhs, const TradeTick_t *rhs);
-
-    TradeId_t trade_id_new(const char *ptr);
+    pass

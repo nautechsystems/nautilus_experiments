@@ -13,22 +13,25 @@
 #  limitations under the License.
 # -------------------------------------------------------------------------------------------------
 
-import pickle
+from core import TempLogger
+from core import LogGuard
+from core import set_global_log_collector
 
-from experiments.data.objects import TradeTick, TradeId
+def test_logging():
+    guard = set_global_log_collector("debug", None, None)
+    logger = TempLogger("cowboy")
+    logger.debug("Yeehaw!")
+    logger.info("Huffaw")
+    logger.warn("Bleh")
+    logger.error("Wololo")
+    ignore_logger = TempLogger("alien")
+    ignore_logger.debug("Green men")
+    ignore_logger.warn("Pew pew")
+    ignore_logger.error("Zoom zoom")
 
-def test_pickling_tradeid():
-    data = TradeId("Hello world")
-    
-    pickled = pickle.dumps(data)
-    unpickled = pickle.loads(pickled)
-
-    assert data == unpickled
-
-def test_pickling_trade():
-    data = TradeTick(TradeId("Hello world"), 0, 0)
-    
-    pickled = pickle.dumps(data)
-    unpickled = pickle.loads(pickled)
-
-    assert data == unpickled
+# try with various RUST_LOG settings
+# python test_logging
+# RUST_LOG="core=debug" python test_logging
+# RUST_LOG="core=info" python test_logging
+if __name__ == "__main__":
+    test_logging()

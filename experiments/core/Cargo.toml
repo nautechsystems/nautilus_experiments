@@ -10,11 +10,13 @@ crate-type = ["rlib", "staticlib"]
 
 [dependencies]
 pyo3 = { version = "0.17.2" }
-ustr = "0.10.0"
+tracing-appender = "0.2.2"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+tracing = "0.1.37"
 
 [features]
 extension-module = ["pyo3/extension-module"]
-default = []
+default = ["extension-module"]
 
 [build-dependencies]
 cbindgen = "0.24.3"
