@@ -95,8 +95,10 @@ version = "0.1.0"
 dependencies = [
  "cbindgen",
  "pyo3",
+ "time",
  "tracing",
  "tracing-appender",
+ "tracing-core",
  "tracing-subscriber",
 ]
 
@@ -720,6 +722,7 @@ dependencies = [
  "sharded-slab",
  "smallvec",
  "thread_local",
+ "time",
  "tracing",
  "tracing-core",
  "tracing-log",
