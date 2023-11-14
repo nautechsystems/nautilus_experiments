@@ -19,7 +19,12 @@ use tracing_subscriber::fmt::{
     FmtContext, FormattedFields,
 };
 use tracing_subscriber::registry::LookupSpan;
-use tracing_subscriber::{fmt, fmt::time::UtcTime, prelude::*, EnvFilter, Registry};
+use tracing_subscriber::{
+    fmt,
+    fmt::time::{ChronoUtc, UtcTime},
+    prelude::*,
+    EnvFilter, Registry,
+};
 
 /// Guards the log collector and flushes it when dropped
 ///
@@ -59,7 +64,9 @@ pub fn set_global_log_collector(
     // let timer = UtcTime::new(format_description!(
     //     "[year]-[month]-[day]T[hour repr:24]:[minute]:[second].[subsecond digits:9]Z"
     // ));
-    let timer = UtcTime::rfc_3339();
+    // let timer = UtcTime::rfc_3339();
+    let timer = ChronoUtc::rfc_3339();
+    let timer = ChronoUtc::new("%FT%T.%9f%:z".to_string());
     // let timer = UtcTime::new(Iso8601::DEFAULT);
     // let time_format = Iso8601<TIME_FORMAT_CONFIG>{};
     // let timer = UtcTime::new(Iso8601::<TIME_FORMAT_CONFIG> {});
