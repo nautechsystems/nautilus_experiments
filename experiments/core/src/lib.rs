@@ -1,5 +1,18 @@
+use chrono::{
+    prelude::{DateTime, Utc},
+    SecondsFormat,
+};
 use pyo3::prelude::*;
-use std::str::FromStr;
+use std::{
+    sync::{
+        atomic::{self, AtomicU64, Ordering},
+        Arc,
+    },
+};
+use std::{
+    str::FromStr,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 use time::{
     format_description::well_known::{
         self,
@@ -7,6 +20,7 @@ use time::{
         Iso8601,
     },
     macros::format_description,
+    OffsetDateTime, UtcOffset,
 };
 use tracing::{debug, error, info, warn, Level};
 use tracing_appender::{
@@ -16,6 +30,7 @@ use tracing_appender::{
 use tracing_core::{Event, Subscriber};
 use tracing_subscriber::fmt::{
     format::{self, FormatEvent, FormatFields},
+    time::{FormatTime, OffsetTime, Uptime},
     FmtContext, FormattedFields,
 };
 use tracing_subscriber::registry::LookupSpan;
@@ -25,6 +40,11 @@ use tracing_subscriber::{
     prelude::*,
     EnvFilter, Registry,
 };
+use once_cell::sync::Lazy;
+
+static TIMER: Lazy<Timer> = Lazy::new(|| Timer {
+    time: Arc::new(AtomicU64::new(10000)),
+});
 
 /// Guards the log collector and flushes it when dropped
 ///
@@ -34,6 +54,21 @@ use tracing_subscriber::{
 #[pyclass]
 pub struct LogGuard {
     guards: Vec<WorkerGuard>,
+}
+
+#[derive(Clone)]
+struct Timer {
+    time: Arc<AtomicU64>,
+}
+
+unsafe impl Sync for Timer {}
+
+impl FormatTime for Timer {
+    fn format_time(&self, w: &mut format::Writer<'_>) -> std::fmt::Result {
+        let timestamp_ns = self.time.load(Ordering::Relaxed);
+        let dt = DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_nanos(timestamp_ns));
+        write!(w, "{}", dt.to_rfc3339_opts(SecondsFormat::Nanos, true))
+    }
 }
 
 const TIME_FORMAT_CONFIG: EncodedConfig = Config::DEFAULT
@@ -61,12 +96,15 @@ pub fn set_global_log_collector(
     file_level: Option<(String, String, String)>,
 ) -> LogGuard {
     let mut guards = Vec::new();
-    // let timer = UtcTime::new(format_description!(
-    //     "[year]-[month]-[day]T[hour repr:24]:[minute]:[second].[subsecond digits:9]Z"
-    // ));
+    let format = format_description!(
+        "[year]-[month]-[day]T[hour repr:24]:[minute]:[second].[subsecond digits:9]Z"
+    );
+    // let timer = UtcTime::new(format);
     // let timer = UtcTime::rfc_3339();
-    let timer = ChronoUtc::rfc_3339();
-    let timer = ChronoUtc::new("%FT%T.%9f%:z".to_string());
+    // let timer = ChronoUtc::rfc_3339();
+    // let timer = ChronoUtc::new("%FT%T.%9f%:z".to_string());
+    // let timer = Uptime::default();
+    // let timer = OffsetTime::new(UtcOffset::UTC, format);
     // let timer = UtcTime::new(Iso8601::DEFAULT);
     // let time_format = Iso8601<TIME_FORMAT_CONFIG>{};
     // let timer = UtcTime::new(Iso8601::<TIME_FORMAT_CONFIG> {});
@@ -75,7 +113,7 @@ pub fn set_global_log_collector(
         let (non_blocking, guard) = tracing_appender::non_blocking(std::io::stdout());
         guards.push(guard);
         fmt::Layer::default()
-            .with_timer(timer)
+            .with_timer(TIMER.clone())
             // .event_format(MyFormatter)
             .with_writer(non_blocking.with_max_level(stdout_level))
     });
@@ -100,6 +138,16 @@ pub fn set_global_log_collector(
         .with(EnvFilter::from_default_env())
         .init();
 
+    let time = SystemTime::now();
+    let dt = DateTime::<Utc>::from(time);
+    let dt = dt.to_rfc3339_opts(SecondsFormat::Nanos, true);
+    println!("{}", dt);
+
+    let time = SystemTime::now();
+    let dt = DateTime::<Utc>::from(time);
+    let dt = dt.to_rfc3339_opts(SecondsFormat::Nanos, true);
+    println!("{}", dt);
+
     LogGuard { guards }
 }
 
@@ -120,10 +168,12 @@ impl TempLogger {
     }
 
     pub fn info(slf: PyRef<'_, Self>, message: String) {
+        TIMER.time.fetch_add(10000, Ordering::SeqCst);
         info!(message, component = slf.component.clone());
     }
 
     pub fn warn(slf: PyRef<'_, Self>, message: String) {
+        TIMER.time.fetch_add(13202, Ordering::SeqCst);
         warn!(message, component = slf.component.clone());
     }
 
