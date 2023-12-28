@@ -2,10 +2,12 @@ use chrono::{
     prelude::{DateTime, Utc},
     SecondsFormat,
 };
+use once_cell::sync::Lazy;
 use pyo3::prelude::*;
 use std::{
+    ops::Deref,
     sync::{
-        atomic::{self, AtomicU64, Ordering},
+        atomic::{self, AtomicBool, AtomicU64, Ordering},
         Arc,
     },
 };
@@ -28,11 +30,6 @@ use tracing_appender::{
     rolling::{RollingFileAppender, Rotation},
 };
 use tracing_core::{Event, Subscriber};
-use tracing_subscriber::fmt::{
-    format::{self, FormatEvent, FormatFields},
-    time::{FormatTime, OffsetTime, Uptime},
-    FmtContext, FormattedFields,
-};
 use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::{
     fmt,
@@ -40,11 +37,14 @@ use tracing_subscriber::{
     prelude::*,
     EnvFilter, Registry,
 };
-use once_cell::sync::Lazy;
-
-static TIMER: Lazy<Timer> = Lazy::new(|| Timer {
-    time: Arc::new(AtomicU64::new(10000)),
-});
+use tracing_subscriber::{
+    fmt::{
+        format::{self, FormatEvent, FormatFields},
+        time::{FormatTime, OffsetTime, Uptime},
+        FmtContext, FormattedFields,
+    },
+    reload::{self, Handle},
+};
 
 /// Guards the log collector and flushes it when dropped
 ///
@@ -53,19 +53,91 @@ static TIMER: Lazy<Timer> = Lazy::new(|| Timer {
 /// closes.
 #[pyclass]
 pub struct LogGuard {
-    guards: Vec<WorkerGuard>,
+    pub guards: Vec<WorkerGuard>,
+    #[pyo3(get, set)]
+    pub time: AtomicTime,
 }
 
-#[derive(Clone)]
-struct Timer {
-    time: Arc<AtomicU64>,
+#[must_use]
+pub fn duration_since_unix_epoch() -> Duration {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Error calling `SystemTime::now.duration_since`")
 }
 
-unsafe impl Sync for Timer {}
+/// Atomic clock stores the last recorded time in nanoseconds
+///
+/// It uses AtomicU64 to atomically update the value using only immutable
+/// references.
+///
+/// AtomicClock can act as a live clock and static clock based on its mode.
+#[derive(Debug, Clone)]
+#[pyclass]
+pub struct AtomicTime {
+    /// Atomic clock is operating in live or static mode
+    mode: Arc<AtomicBool>,
+    /// The last recorded time in nanoseconds for the clock
+    timestamp_ns: Arc<AtomicU64>,
+}
 
-impl FormatTime for Timer {
+impl Deref for AtomicTime {
+    type Target = AtomicU64;
+
+    fn deref(&self) -> &Self::Target {
+        &self.timestamp_ns
+    }
+}
+
+#[pymethods]
+impl AtomicTime {
+    fn live(&mut self) {
+        self.mode.store(true, Ordering::Relaxed)
+    }
+
+    fn static_mode(&mut self) {
+        self.mode.store(false, Ordering::Relaxed)
+    }
+
+    /// Increments current time with a delta and returns the updated time
+    pub fn increment_time(&self, delta: u64) -> u64 {
+        self.fetch_add(delta, Ordering::Relaxed) + delta
+    }
+}
+
+impl AtomicTime {
+    /// New atomic clock set with the given time
+    pub fn new(mode: bool, time: u64) -> Self {
+        AtomicTime {
+            mode: Arc::new(AtomicBool::new(mode)),
+            timestamp_ns: Arc::new(AtomicU64::new(time)),
+        }
+    }
+
+    /// Get time in nanoseconds.
+    ///
+    /// * Live mode returns current wall clock time since UNIX epoch (unique and monotonic)
+    /// * Static mode returns currently stored time.
+    pub fn get_time_ns(&self) -> u64 {
+        match self.mode.load(Ordering::Relaxed) {
+            true => self.time_since_epoch(),
+            false => self.timestamp_ns.load(Ordering::Relaxed),
+        }
+    }
+
+    /// Stores and returns current time
+    pub fn time_since_epoch(&self) -> u64 {
+        // increment by 1 nanosecond to keep increasing time
+        let now = duration_since_unix_epoch().as_nanos() as u64 + 1;
+        let last = self.load(Ordering::SeqCst) + 1;
+        let new = now.max(last);
+        self.store(new, Ordering::SeqCst);
+        new
+    }
+}
+
+impl FormatTime for AtomicTime {
     fn format_time(&self, w: &mut format::Writer<'_>) -> std::fmt::Result {
-        let timestamp_ns = self.time.load(Ordering::Relaxed);
+        let timestamp_ns = self.get_time_ns();
         let dt = DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_nanos(timestamp_ns));
         write!(w, "{}", dt.to_rfc3339_opts(SecondsFormat::Nanos, true))
     }
@@ -96,6 +168,7 @@ pub fn set_global_log_collector(
     file_level: Option<(String, String, String)>,
 ) -> LogGuard {
     let mut guards = Vec::new();
+    let mut handle: Option<Handle<_, _>> = None;
     let format = format_description!(
         "[year]-[month]-[day]T[hour repr:24]:[minute]:[second].[subsecond digits:9]Z"
     );
@@ -108,14 +181,21 @@ pub fn set_global_log_collector(
     // let timer = UtcTime::new(Iso8601::DEFAULT);
     // let time_format = Iso8601<TIME_FORMAT_CONFIG>{};
     // let timer = UtcTime::new(Iso8601::<TIME_FORMAT_CONFIG> {});
+    let timer = AtomicTime::new(false, 0);
     let stdout_sub_builder = stdout_level.map(|stdout_level| {
         let stdout_level = Level::from_str(&stdout_level).unwrap();
         let (non_blocking, guard) = tracing_appender::non_blocking(std::io::stdout());
         guards.push(guard);
-        fmt::Layer::default()
-            .with_timer(TIMER.clone())
-            // .event_format(MyFormatter)
-            .with_writer(non_blocking.with_max_level(stdout_level))
+        let (layer, reload_handle) = reload::Layer::new(
+            fmt::Layer::default()
+                .with_timer(timer.clone())
+                // .event_format(MyFormatter {
+                //     time: timer.clone(),
+                // })
+                .with_writer(non_blocking.with_max_level(stdout_level)),
+        );
+        handle = Some(reload_handle);
+        layer
     });
     let stderr_sub_builder = stderr_level.map(|stderr_level| {
         let stderr_level = Level::from_str(&stderr_level).unwrap();
@@ -138,17 +218,13 @@ pub fn set_global_log_collector(
         .with(EnvFilter::from_default_env())
         .init();
 
-    let time = SystemTime::now();
-    let dt = DateTime::<Utc>::from(time);
-    let dt = dt.to_rfc3339_opts(SecondsFormat::Nanos, true);
-    println!("{}", dt);
+    info!("hoo");
+    info!("haa");
 
-    let time = SystemTime::now();
-    let dt = DateTime::<Utc>::from(time);
-    let dt = dt.to_rfc3339_opts(SecondsFormat::Nanos, true);
-    println!("{}", dt);
-
-    LogGuard { guards }
+    LogGuard {
+        guards,
+        time: timer,
+    }
 }
 
 #[pyclass]
@@ -168,12 +244,10 @@ impl TempLogger {
     }
 
     pub fn info(slf: PyRef<'_, Self>, message: String) {
-        TIMER.time.fetch_add(10000, Ordering::SeqCst);
         info!(message, component = slf.component.clone());
     }
 
     pub fn warn(slf: PyRef<'_, Self>, message: String) {
-        TIMER.time.fetch_add(13202, Ordering::SeqCst);
         warn!(message, component = slf.component.clone());
     }
 
@@ -191,7 +265,9 @@ pub fn core(_: Python<'_>, m: &PyModule) -> PyResult<()> {
     Ok(())
 }
 
-struct MyFormatter;
+struct MyFormatter {
+    pub time: AtomicTime,
+}
 
 impl<S, N> FormatEvent<S, N> for MyFormatter
 where
@@ -206,6 +282,12 @@ where
     ) -> std::fmt::Result {
         // Format values from the event's's metadata:
         let metadata = event.metadata();
+
+        if self.time.format_time(&mut writer).is_err() {
+            writer.write_str("<unknown time>")?;
+        }
+        writer.write_char(' ');
+
         if let Some(value) = metadata.fields().field("component") {
             write!(&mut writer, "{} {}: ", metadata.level(), value.to_string())?;
         } else {
