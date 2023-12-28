@@ -2,7 +2,14 @@ use core::Logger;
 
 use log::{debug, error, info, log, warn};
 
+#[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
 fn main() {
+    #[cfg(feature = "dhat-heap")]
+    let _profiler = dhat::Profiler::new_heap();
+
     Logger::initialize();
     info!("hi");
     debug!("bye");
