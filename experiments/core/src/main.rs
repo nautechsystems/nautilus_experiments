@@ -2,8 +2,15 @@ use core::Logger;
 
 use log::{debug, error, info, log, warn};
 
+#[cfg(feature = "dhat-heap")]
+#[global_allocator]
+static ALLOC: dhat::Alloc = dhat::Alloc;
+
 fn main() {
-    Logger::initialize();
+    #[cfg(feature = "dhat-heap")]
+    let _profiler = dhat::Profiler::new_heap();
+
+    let handle = Logger::initialize();
     info!("hi");
     debug!("bye");
     error!("sigh");
@@ -11,4 +18,5 @@ fn main() {
     info!(target: "nono", "yeehaw");
     // info!(target: no_target, "yeehaw");
     info!(component = no_target; "yeehaw");
+    handle.shutdown();
 }

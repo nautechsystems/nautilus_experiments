@@ -1,12 +1,15 @@
-use log::{debug, error, info, log, set_boxed_logger, warn, set_max_level};
+use log::{debug, error, info, log, set_boxed_logger, set_max_level, warn};
 use pyo3::prelude::*;
 use std::{
     io::{self, BufWriter, Stdout, Write},
     ops::Deref,
     sync::{
+        self,
         atomic::{self, AtomicBool, AtomicU64, Ordering},
+        mpsc::SyncSender,
         Arc, Mutex,
     },
+    thread::{self, JoinHandle},
 };
 use std::{
     str::FromStr,
@@ -95,24 +98,56 @@ impl AtomicTime {
 //     }
 // }
 
-#[derive(Clone, Debug)]
+pub struct LoggerHandle {
+    handle: JoinHandle<()>,
+}
+
+impl LoggerHandle {
+    pub fn shutdown(self) {
+        log::logger().flush();
+        let _ = self.handle.join().unwrap();
+    }
+}
+
+#[derive(Debug)]
 pub struct Logger {
     time: AtomicTime,
-    writer: Arc<Mutex<BufWriter<Stdout>>>,
+    tx: SyncSender<LogEvent>,
+}
+
+struct LogEvent {
+    ts: u64,
+    level: log::Level,
+    data: String,
 }
 
 impl Logger {
-    fn new() -> Self {
+    fn new(tx: SyncSender<LogEvent>) -> Self {
         Self {
             time: AtomicTime::new(true, 0),
-            writer: Arc::new(Mutex::new(BufWriter::new(io::stdout()))),
+            tx,
         }
     }
 
-    pub fn initialize() {
-        let logger = Self::new();
+    pub fn initialize() -> LoggerHandle {
+        let (tx, rx) = sync::mpsc::sync_channel::<LogEvent>(0);
+        let handle = thread::spawn(move || {
+            let mut writer = BufWriter::new(io::stdout());
+            while let Ok(LogEvent { ts, level, data }) = rx.recv() {
+                if ts == u64::MAX {
+                    break;
+                }
+                writer.write_fmt(format_args!("{} {} {}\n", ts, level, data)).unwrap();
+            }
+
+            dbg!("quitting writer thread");
+            let _ = writer.flush().unwrap();
+        });
+        let logger = Self::new(tx);
+        let logger_handle = LoggerHandle { handle };
         let _ = set_boxed_logger(Box::new(logger)).unwrap();
         let _ = set_max_level(log::LevelFilter::Debug);
+        logger_handle
     }
 }
 
@@ -122,27 +157,28 @@ impl log::Log for Logger {
     }
 
     fn log(&self, record: &log::Record) {
-        dbg!("hi logging");
         let target = record
             .key_values()
             .get("component".into())
             .map(|v| v.to_string())
             .unwrap_or_else(|| record.metadata().target().to_string());
-        println!("{} {} {}", self.time.get_time_ns(), target, record.args());
-        self.writer
-            .lock()
-            .unwrap()
-            .write_fmt(format_args!(
-                "{} {} {}\n",
-                self.time.get_time_ns(),
-                target,
-                record.args()
-            ))
+        self.tx
+            .send(LogEvent {
+                ts: self.time.get_time_ns(),
+                level: record.level(),
+                data: format_args!("{}", record.args()).to_string(),
+            })
             .unwrap();
     }
 
     fn flush(&self) {
-        self.writer.lock().unwrap().flush().unwrap();
+        self.tx
+            .send(LogEvent {
+                ts: u64::MAX,
+                level: log::Level::Debug,
+                data: "".to_string(),
+            })
+            .unwrap();
     }
 }
 
