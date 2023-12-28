@@ -13,7 +13,7 @@ pyo3 = { version = "0.17.2" }
 time = { version = "0.3.25", features = ["macros", "formatting"] }
 chrono = "0.4.31"
 once_cell = "1.18.0"
-log = { version = "0.4.20", features = ["serde", "kv_unstable", "std"] }
+log = { version = "0.4.20", features = ["serde", "kv_unstable", "std", "kv_unstable_std"] }
 
 [features]
 extension-module = ["pyo3/extension-module"]

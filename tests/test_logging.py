@@ -14,18 +14,14 @@
 # -------------------------------------------------------------------------------------------------
 
 from core import TempLogger
-from core import LogGuard
 from core import set_global_log_collector
 
 def test_logging():
-    guard = set_global_log_collector("debug", None, None)
+    set_global_log_collector()
     logger = TempLogger("cowboy")
     logger.debug("Yeehaw!")
-    guard.time.increment_time(40)
     logger.info("Huffaw")
-    guard.time.increment_time(80)
     logger.warn("Bleh")
-    guard.time.live()
     logger.error("Wololo")
     ignore_logger = TempLogger("alien")
     ignore_logger.debug("Green men")

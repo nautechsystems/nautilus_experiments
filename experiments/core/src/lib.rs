@@ -1,8 +1,4 @@
-use chrono::{
-    prelude::{DateTime, Utc},
-    SecondsFormat,
-};
-use log::{debug, error, info, log, set_boxed_logger, warn};
+use log::{debug, error, info, log, set_boxed_logger, warn, set_max_level};
 use pyo3::prelude::*;
 use std::{
     io::{self, BufWriter, Stdout, Write},
@@ -15,15 +11,6 @@ use std::{
 use std::{
     str::FromStr,
     time::{Duration, SystemTime, UNIX_EPOCH},
-};
-use time::{
-    format_description::well_known::{
-        self,
-        iso8601::{Config, EncodedConfig},
-        Iso8601,
-    },
-    macros::format_description,
-    OffsetDateTime, UtcOffset,
 };
 
 /// Atomic clock stores the last recorded time in nanoseconds
@@ -124,7 +111,8 @@ impl Logger {
 
     pub fn initialize() {
         let logger = Self::new();
-        set_boxed_logger(Box::new(logger));
+        let _ = set_boxed_logger(Box::new(logger)).unwrap();
+        let _ = set_max_level(log::LevelFilter::Debug);
     }
 }
 
@@ -134,17 +122,23 @@ impl log::Log for Logger {
     }
 
     fn log(&self, record: &log::Record) {
+        dbg!("hi logging");
         let target = record
             .key_values()
             .get("component".into())
             .map(|v| v.to_string())
             .unwrap_or_else(|| record.metadata().target().to_string());
-        self.writer.lock().unwrap().write_fmt(format_args!(
-            "{} {} {}",
-            self.time.get_time_ns(),
-            target,
-            record.args()
-        )).unwrap();
+        println!("{} {} {}", self.time.get_time_ns(), target, record.args());
+        self.writer
+            .lock()
+            .unwrap()
+            .write_fmt(format_args!(
+                "{} {} {}\n",
+                self.time.get_time_ns(),
+                target,
+                record.args()
+            ))
+            .unwrap();
     }
 
     fn flush(&self) {
@@ -169,21 +163,21 @@ impl TempLogger {
         TempLogger { component }
     }
 
-    // pub fn debug(slf: PyRef<'_, Self>, message: String) {
-    //     debug!(component = slf.component.clone(); message);
-    // }
+    pub fn debug(slf: PyRef<'_, Self>, message: String) {
+        debug!("{}: {}", &slf.component, message);
+    }
 
-    // pub fn info(slf: PyRef<'_, Self>, message: String) {
-    //     info!(message, component = slf.component.clone());
-    // }
+    pub fn info(slf: PyRef<'_, Self>, message: String) {
+        info!("{}: {}", &slf.component, message);
+    }
 
-    // pub fn warn(slf: PyRef<'_, Self>, message: String) {
-    //     warn!(message, component = slf.component.clone());
-    // }
+    pub fn warn(slf: PyRef<'_, Self>, message: String) {
+        warn!("{}: {}", &slf.component, message);
+    }
 
-    // pub fn error(slf: PyRef<'_, Self>, message: String) {
-    //     error!(message, component = slf.component.clone());
-    // }
+    pub fn error(slf: PyRef<'_, Self>, message: String) {
+        error!("{}: {}", &slf.component, message);
+    }
 }
 
 /// Loaded as nautilus_pyo3.common
