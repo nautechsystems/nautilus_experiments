@@ -66,16 +66,8 @@ impl TempLogger {
         TempLogger { component }
     }
 
-    pub fn debug(slf: PyRef<'_, Self>, message: String) {
-        debug!("{}: {}", &slf.component, message);
-    }
-
     pub fn info(slf: PyRef<'_, Self>, message: String) {
         info!("{}: {}", &slf.component, message);
-    }
-
-    pub fn flush(_slf: PyRef<'_, Self>) {
-        log::logger().flush();
     }
 }
 
@@ -88,9 +80,8 @@ pub fn core(_: Python<'_>, m: &PyModule) -> PyResult<()> {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn logger_debug(message: *const c_char) {
-    let message = CStr::from_ptr(message).to_str().unwrap().to_string();
-    debug!("{}", message);
+pub extern "C" fn logger_init() {
+    Logger::initialize()
 }
 
 #[no_mangle]

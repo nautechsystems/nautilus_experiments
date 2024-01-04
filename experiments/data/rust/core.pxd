@@ -5,6 +5,6 @@ from libc.stdint cimport uint64_t, uint8_t
 
 cdef extern from "core.h":
 
-    void logger_debug(const char *message);
+    void logger_init();
 
     void logger_info(const char *message);

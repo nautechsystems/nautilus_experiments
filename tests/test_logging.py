@@ -18,23 +18,23 @@ from experiments.data.objects import CyLogger
 from core import set_global_log_collector
 
 def test_cython_logging():
-    CyLogger.debug("cython: Yeehaw!")
-    CyLogger.info("cython: Huffaw")
-    CyLogger.debug("cython: Green men")
+    CyLogger.info("cy: Yeehaw!")
+    CyLogger.info("cy: Huffaw")
+    CyLogger.info("cy: Green men")
 
 
 def test_logging():
     logger = TempLogger("cowboy")
-    logger.debug("python: Yeehaw!")
+    logger.info("py: Yeehaw!")
     logger.info("py: Huffaw")
-    ignore_logger = TempLogger("alien")
-    ignore_logger.debug("py: Green men")
+    logger.info("py: Green men")
 
 # try with various RUST_LOG settings
 # python test_logging
 # RUST_LOG="core=debug" python test_logging
 # RUST_LOG="core=info" python test_logging
 if __name__ == "__main__":
-    set_global_log_collector()
+    CyLogger.init()
+    # set_global_log_collector()
     test_cython_logging()
     test_logging()

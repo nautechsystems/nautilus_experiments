@@ -1,9 +1,9 @@
 cdef class InternalLogger:
     @staticmethod
-    cdef info(str message)
+    cdef init()
 
     @staticmethod
-    cdef debug(str message)
+    cdef info(str message)
 
 cdef class CyLogger:
     pass
