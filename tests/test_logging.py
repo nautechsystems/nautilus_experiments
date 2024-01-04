@@ -34,7 +34,9 @@ def test_logging():
 # RUST_LOG="core=debug" python test_logging
 # RUST_LOG="core=info" python test_logging
 if __name__ == "__main__":
-    CyLogger.init()
-    # set_global_log_collector()
+    # CyLogger.init()
+    set_global_log_collector()
+    test_cython_logging()
+    test_logging()
     test_cython_logging()
     test_logging()
