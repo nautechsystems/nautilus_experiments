@@ -14,7 +14,17 @@
 # -------------------------------------------------------------------------------------------------
 
 from core import TempLogger
+from experiments.data.objects import CyLogger
 from core import set_global_log_collector
+
+def test_cython_logging():
+    set_global_log_collector()
+    CyLogger.debug("Yeehaw!")
+    CyLogger.info("Huffaw")
+    CyLogger.error("Wololo")
+    CyLogger.debug("Green men")
+    CyLogger.error("Zoom zoom")
+
 
 def test_logging():
     set_global_log_collector()
@@ -27,10 +37,12 @@ def test_logging():
     ignore_logger.debug("Green men")
     ignore_logger.warn("Pew pew")
     ignore_logger.error("Zoom zoom")
+    logger.flush()
 
 # try with various RUST_LOG settings
 # python test_logging
 # RUST_LOG="core=debug" python test_logging
 # RUST_LOG="core=info" python test_logging
 if __name__ == "__main__":
-    test_logging()
+    test_cython_logging()
+    # test_logging()

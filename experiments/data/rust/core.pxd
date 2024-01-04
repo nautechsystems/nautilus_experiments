@@ -4,4 +4,17 @@ from cpython.object cimport PyObject
 from libc.stdint cimport uint64_t, uint8_t
 
 cdef extern from "core.h":
-    pass
+
+    void logger_debug(const char *message);
+
+    void logger_info(const char *message);
+
+    void logger_error(const char *message);
+
+    void logger_warn(const char *message);
+
+cdef extern from "Python.h":
+    const char* PyUnicode_AsUTF8AndSize(object unicode, Py_ssize_t *size)
+
+cdef inline const char* pystr_to_cstr(str value):
+    return PyUnicode_AsUTF8AndSize(value, NULL)

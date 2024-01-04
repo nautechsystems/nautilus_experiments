@@ -1,6 +1,7 @@
 use log::{debug, error, info, log, set_boxed_logger, set_max_level, warn};
 use pyo3::prelude::*;
 use std::{
+    ffi::{c_char, CStr},
     io::{self, BufWriter, Stdout, Write},
     ops::Deref,
     sync::{
@@ -137,7 +138,10 @@ impl Logger {
                 if ts == u64::MAX {
                     break;
                 }
-                writer.write_fmt(format_args!("{} {} {}\n", ts, level, data)).unwrap();
+                writer
+                    .write_fmt(format_args!("{} {} {}\n", ts, level, data))
+                    .unwrap();
+                let _ = writer.flush().unwrap();
             }
 
             dbg!("quitting writer thread");
@@ -214,6 +218,10 @@ impl TempLogger {
     pub fn error(slf: PyRef<'_, Self>, message: String) {
         error!("{}: {}", &slf.component, message);
     }
+
+    pub fn flush(slf: PyRef<'_, Self>) {
+        log::logger().flush();
+    }
 }
 
 /// Loaded as nautilus_pyo3.common
@@ -222,4 +230,28 @@ pub fn core(_: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<TempLogger>()?;
     m.add_function(wrap_pyfunction!(set_global_log_collector, m)?)?;
     Ok(())
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn logger_debug(message: *const c_char) {
+    let message = CStr::from_ptr(message).to_str().unwrap().to_string();
+    debug!("{}", message);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn logger_info(message: *const c_char) {
+    let message = CStr::from_ptr(message).to_str().unwrap().to_string();
+    info!("{}", message);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn logger_error(message: *const c_char) {
+    let message = CStr::from_ptr(message).to_str().unwrap().to_string();
+    error!("{}", message);
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn logger_warn(message: *const c_char) {
+    let message = CStr::from_ptr(message).to_str().unwrap().to_string();
+    warn!("{}", message);
 }
