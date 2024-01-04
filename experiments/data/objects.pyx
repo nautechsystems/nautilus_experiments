@@ -1,7 +1,7 @@
 from experiments.data.rust.core cimport logger_info
 from experiments.data.rust.core cimport logger_debug
 from experiments.data.rust.core cimport logger_error
-from experiments.data.rust.core cimport pystr_to_cstr
+from experiments.data.string cimport pystr_to_cstr
 
 cdef class InternalLogger:
     @staticmethod

@@ -1,6 +1,9 @@
 install:
 	poetry install
 
+maturin:
+	maturin develop --features extension-module -m experiments/core/Cargo.toml
+
 build: clean-artifacts
 	cargo build --manifest-path experiments/core/Cargo.toml
 	poetry run python build.py

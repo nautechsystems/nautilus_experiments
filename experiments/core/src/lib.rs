@@ -1,118 +1,22 @@
-use log::{debug, error, info, log, set_boxed_logger, set_max_level, warn};
+use log::{debug, error, info, set_boxed_logger, set_max_level, warn};
 use pyo3::prelude::*;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     ffi::{c_char, CStr},
-    io::{self, BufWriter, Stdout, Write},
-    ops::Deref,
-    sync::{
-        self,
-        atomic::{self, AtomicBool, AtomicU64, Ordering},
-        mpsc::SyncSender,
-        Arc, Mutex,
-    },
-    thread::{self, JoinHandle},
-};
-use std::{
-    str::FromStr,
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    io::{self, BufWriter, Write},
+    sync::{self, mpsc::SyncSender},
+    thread::{self},
 };
 
-/// Atomic clock stores the last recorded time in nanoseconds
-///
-/// It uses AtomicU64 to atomically update the value using only immutable
-/// references.
-///
-/// AtomicClock can act as a live clock and static clock based on its mode.
-#[derive(Debug, Clone)]
-#[pyclass]
-pub struct AtomicTime {
-    /// Atomic clock is operating in live or static mode
-    mode: Arc<AtomicBool>,
-    /// The last recorded time in nanoseconds for the clock
-    timestamp_ns: Arc<AtomicU64>,
-}
-
-impl Deref for AtomicTime {
-    type Target = AtomicU64;
-
-    fn deref(&self) -> &Self::Target {
-        &self.timestamp_ns
-    }
-}
-
-#[pymethods]
-impl AtomicTime {
-    fn live(&mut self) {
-        self.mode.store(true, Ordering::Relaxed)
-    }
-
-    fn static_mode(&mut self) {
-        self.mode.store(false, Ordering::Relaxed)
-    }
-
-    /// Increments current time with a delta and returns the updated time
-    pub fn increment_time(&self, delta: u64) -> u64 {
-        self.fetch_add(delta, Ordering::Relaxed) + delta
-    }
-}
-
-impl AtomicTime {
-    /// New atomic clock set with the given time
-    pub fn new(mode: bool, time: u64) -> Self {
-        AtomicTime {
-            mode: Arc::new(AtomicBool::new(mode)),
-            timestamp_ns: Arc::new(AtomicU64::new(time)),
-        }
-    }
-
-    /// Get time in nanoseconds.
-    ///
-    /// * Live mode returns current wall clock time since UNIX epoch (unique and monotonic)
-    /// * Static mode returns currently stored time.
-    pub fn get_time_ns(&self) -> u64 {
-        match self.mode.load(Ordering::Relaxed) {
-            true => self.time_since_epoch(),
-            false => self.timestamp_ns.load(Ordering::Relaxed),
-        }
-    }
-
-    /// Stores and returns current time
-    pub fn time_since_epoch(&self) -> u64 {
-        // increment by 1 nanosecond to keep increasing time
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Error calling `SystemTime::now.duration_since`")
-            .as_nanos() as u64
-            + 1;
-        let last = self.load(Ordering::SeqCst) + 1;
-        let new = now.max(last);
-        self.store(new, Ordering::SeqCst);
-        new
-    }
-}
-
-// impl FormatTime for AtomicTime {
-//     fn format_time(&self, w: &mut format::Writer<'_>) -> std::fmt::Result {
-//         let timestamp_ns = self.get_time_ns();
-//         let dt = DateTime::<Utc>::from(UNIX_EPOCH + Duration::from_nanos(timestamp_ns));
-//         write!(w, "{}", dt.to_rfc3339_opts(SecondsFormat::Nanos, true))
-//     }
-// }
-
-pub struct LoggerHandle {
-    handle: JoinHandle<()>,
-}
-
-impl LoggerHandle {
-    pub fn shutdown(self) {
-        log::logger().flush();
-        let _ = self.handle.join().unwrap();
-    }
+pub fn time_since_epoch() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("Error calling `SystemTime::now.duration_since`")
+        .as_nanos() as u64
 }
 
 #[derive(Debug)]
 pub struct Logger {
-    time: AtomicTime,
     tx: SyncSender<LogEvent>,
 }
 
@@ -124,15 +28,12 @@ struct LogEvent {
 
 impl Logger {
     fn new(tx: SyncSender<LogEvent>) -> Self {
-        Self {
-            time: AtomicTime::new(true, 0),
-            tx,
-        }
+        Self { tx }
     }
 
-    pub fn initialize() -> LoggerHandle {
+    pub fn initialize() {
         let (tx, rx) = sync::mpsc::sync_channel::<LogEvent>(0);
-        let handle = thread::spawn(move || {
+        let _handle = thread::spawn(move || {
             let mut writer = BufWriter::new(io::stdout());
             while let Ok(LogEvent { ts, level, data }) = rx.recv() {
                 if ts == u64::MAX {
@@ -143,32 +44,22 @@ impl Logger {
                     .unwrap();
                 let _ = writer.flush().unwrap();
             }
-
-            dbg!("quitting writer thread");
-            let _ = writer.flush().unwrap();
         });
         let logger = Self::new(tx);
-        let logger_handle = LoggerHandle { handle };
         let _ = set_boxed_logger(Box::new(logger)).unwrap();
         let _ = set_max_level(log::LevelFilter::Debug);
-        logger_handle
     }
 }
 
 impl log::Log for Logger {
-    fn enabled(&self, metadata: &log::Metadata) -> bool {
+    fn enabled(&self, _metadata: &log::Metadata) -> bool {
         true
     }
 
     fn log(&self, record: &log::Record) {
-        let target = record
-            .key_values()
-            .get("component".into())
-            .map(|v| v.to_string())
-            .unwrap_or_else(|| record.metadata().target().to_string());
         self.tx
             .send(LogEvent {
-                ts: self.time.get_time_ns(),
+                ts: time_since_epoch(),
                 level: record.level(),
                 data: format_args!("{}", record.args()).to_string(),
             })
@@ -219,7 +110,7 @@ impl TempLogger {
         error!("{}: {}", &slf.component, message);
     }
 
-    pub fn flush(slf: PyRef<'_, Self>) {
+    pub fn flush(_slf: PyRef<'_, Self>) {
         log::logger().flush();
     }
 }
