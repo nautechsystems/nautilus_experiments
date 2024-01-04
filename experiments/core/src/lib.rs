@@ -3,9 +3,7 @@ use pyo3::prelude::*;
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     ffi::{c_char, CStr},
-    io::{self, BufWriter, Write},
-    sync::{self, mpsc::SyncSender},
-    thread::{self},
+    io::{self, Write},
 };
 
 pub fn time_since_epoch() -> u64 {
@@ -16,37 +14,15 @@ pub fn time_since_epoch() -> u64 {
 }
 
 #[derive(Debug)]
-pub struct Logger {
-    tx: SyncSender<LogEvent>,
-}
-
-struct LogEvent {
-    ts: u64,
-    level: log::Level,
-    data: String,
-}
+pub struct Logger;
 
 impl Logger {
-    fn new(tx: SyncSender<LogEvent>) -> Self {
-        Self { tx }
+    fn new() -> Self {
+        Self {}
     }
 
     pub fn initialize() {
-        let (tx, rx) = sync::mpsc::sync_channel::<LogEvent>(0);
-        let _handle = thread::spawn(move || {
-            let mut writer = BufWriter::new(io::stdout());
-            while let Ok(LogEvent { ts, level, data }) = rx.recv() {
-                if ts == u64::MAX {
-                    break;
-                }
-                writer
-                    .write_fmt(format_args!("{} {} {}\n", ts, level, data))
-                    .unwrap();
-                let _ = writer.flush().unwrap();
-            }
-        });
-        let logger = Self::new(tx);
-        let _ = set_boxed_logger(Box::new(logger)).unwrap();
+        let _ = set_boxed_logger(Box::new(Logger::new())).unwrap();
         let _ = set_max_level(log::LevelFilter::Debug);
     }
 }
@@ -57,23 +33,19 @@ impl log::Log for Logger {
     }
 
     fn log(&self, record: &log::Record) {
-        self.tx
-            .send(LogEvent {
-                ts: time_since_epoch(),
-                level: record.level(),
-                data: format_args!("{}", record.args()).to_string(),
-            })
+        io::stdout()
+            .write_fmt(format_args!(
+                "{} {} {}\n",
+                time_since_epoch(),
+                record.level(),
+                record.args()
+            ))
             .unwrap();
+        io::stdout().flush().unwrap();
     }
 
     fn flush(&self) {
-        self.tx
-            .send(LogEvent {
-                ts: u64::MAX,
-                level: log::Level::Debug,
-                data: "".to_string(),
-            })
-            .unwrap();
+        println!("Flushing");
     }
 }
 
@@ -102,14 +74,6 @@ impl TempLogger {
         info!("{}: {}", &slf.component, message);
     }
 
-    pub fn warn(slf: PyRef<'_, Self>, message: String) {
-        warn!("{}: {}", &slf.component, message);
-    }
-
-    pub fn error(slf: PyRef<'_, Self>, message: String) {
-        error!("{}: {}", &slf.component, message);
-    }
-
     pub fn flush(_slf: PyRef<'_, Self>) {
         log::logger().flush();
     }
@@ -132,17 +96,8 @@ pub unsafe extern "C" fn logger_debug(message: *const c_char) {
 #[no_mangle]
 pub unsafe extern "C" fn logger_info(message: *const c_char) {
     let message = CStr::from_ptr(message).to_str().unwrap().to_string();
+    dbg!("cython info");
+    dbg!(&message);
+    log::logger().flush();
     info!("{}", message);
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn logger_error(message: *const c_char) {
-    let message = CStr::from_ptr(message).to_str().unwrap().to_string();
-    error!("{}", message);
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn logger_warn(message: *const c_char) {
-    let message = CStr::from_ptr(message).to_str().unwrap().to_string();
-    warn!("{}", message);
 }

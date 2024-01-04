@@ -8,7 +8,3 @@ cdef extern from "core.h":
     void logger_debug(const char *message);
 
     void logger_info(const char *message);
-
-    void logger_error(const char *message);
-
-    void logger_warn(const char *message);
