@@ -29,3 +29,17 @@ We can also make sure that these are in fact from the same data source with just
 ```bash
 diff 126-groups-python.csv 127-groups-python.csv
 ```
+
+# Helper utils
+
+Make a smaller parquet file by extracting the first n row groups.
+
+```bash
+python extract_groups.py <parquet-file> <num-rows>
+```
+
+Check that the invariant holds over the row groups i.e. the row group timestamps are in ascending order and not overlapping.
+
+```bash
+python check_invariant.py <csv-file>
+```
