@@ -23,6 +23,8 @@ These are the values on my system.
 | false | false | 0.21 | 45 | ✅ |
 | false | true | 0.33 | 151 | ❌ |
 
+Note: You can pass an `explain` argument to explain the query plan instead of running.
+
 The `full_file` binary reads the whole file and counts the total number of rows.
 
 ```

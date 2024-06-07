@@ -21,6 +21,12 @@ async fn main() {
     } else {
         "SELECT * FROM data"
     };
+    // Explain query
+    let explain = if env::args().find(|v| v == "explain").is_some() {
+        true
+    } else {
+        false
+    };
 
     let session_cfg = SessionConfig::new().set_str(
         "datafusion.optimizer.repartition_file_scans",
@@ -41,12 +47,13 @@ async fn main() {
         .await
         .unwrap();
     let query = session_ctx.sql(sql_query).await.unwrap();
-    let batch_stream = query.execute_stream().await.unwrap();
 
-    let row_count = batch_stream
-        .fold(0, |acc, batch| async move {
-            acc + batch.map(|batch| batch.num_rows()).unwrap_or(0)
-        })
-        .await;
-    println!("Total rows: {}", row_count);
+    if explain {
+        let explain = query.explain(true, true).unwrap();
+        println!("{:#?}", explain);
+    } else {
+        let mut batch_stream = query.execute_stream().await.unwrap();
+        let batch = batch_stream.next().await.unwrap().unwrap();
+        println!("{}", batch.num_rows());
+    }
 }
