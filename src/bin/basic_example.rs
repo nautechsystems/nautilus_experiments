@@ -1,7 +1,4 @@
-use std::{
-    any::{Any, TypeId},
-    collections::HashMap,
-};
+use std::{any::Any, collections::HashMap};
 
 trait MessageHandler {
     fn handle(&mut self, message: &dyn Any);
