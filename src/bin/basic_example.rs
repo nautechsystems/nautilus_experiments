@@ -25,7 +25,7 @@ impl MessageBusContext {
 
     fn handle_message(&mut self, name: &str, message: Box<dyn Any>) {
         if let Some(handler) = self.handlers.get_mut(name) {
-            handler.handle(&message);
+            handler.handle(message.as_ref());
         }
     }
 }
@@ -41,7 +41,7 @@ struct DataBuilderMessageHandler {
 
 impl MessageHandler for DataBuilderMessageHandler {
     fn handle(&mut self, message: &dyn Any) {
-        // assert!(message.is::<MessageEvent>());
+        assert!(message.is::<MessageEvent>());
 
         if let Some(MessageEvent { name }) = message.downcast_ref::<MessageEvent>() {
             self.data.push(name.clone())
@@ -68,12 +68,12 @@ fn main() {
         }),
     );
 
-    let inner_state: &DataBuilderMessageHandler = unsafe {
-        &*(context.handlers.get("data_builder").unwrap().as_ref() as *const dyn MessageHandler
-            as *const &DataBuilderMessageHandler)
-    };
-    dbg!(&inner_state.data);
-    assert_eq!(inner_state.data, vec!["hello", "world"]);
+    {
+        let handler = context.handlers.get("data_builder").unwrap().as_ref();
+        let inner_state: &DataBuilderMessageHandler =
+            unsafe { &*(handler as *const dyn MessageHandler as *const DataBuilderMessageHandler) };
+        assert_eq!(inner_state.data, vec!["hello", "world"]);
+    }
 
     context.handle_message(
         "data_builder",
@@ -81,10 +81,12 @@ fn main() {
             name: "again".to_string(),
         }),
     );
-    let inner_state: &DataBuilderMessageHandler = unsafe {
-        &*(context.handlers.get("data_builder").unwrap().as_ref() as *const dyn MessageHandler
-            as *const &DataBuilderMessageHandler)
-    };
-    dbg!(&inner_state.data);
-    assert_eq!(inner_state.data, vec!["hello", "world", "again"]);
+
+    {
+        let handler = context.handlers.get("data_builder").unwrap().as_ref();
+        let inner_state: &DataBuilderMessageHandler = unsafe {
+            &*(handler as *const dyn MessageHandler as *const &DataBuilderMessageHandler)
+        };
+        assert_eq!(inner_state.data, vec!["hello", "world", "again"]);
+    }
 }
