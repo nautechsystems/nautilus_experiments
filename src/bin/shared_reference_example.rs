@@ -1,4 +1,4 @@
-use std::{any::Any, cell::RefCell, collections::HashMap};
+use std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc};
 
 trait MessageHandler {
     fn handle(&mut self, message: &dyn Any);
@@ -37,7 +37,7 @@ struct CommandEvent {
 
 #[derive(Debug)]
 struct DataBuilderMessageHandler {
-    data: RefCell<Vec<String>>,
+    data: Rc<RefCell<Vec<String>>>,
 }
 
 impl MessageHandler for DataBuilderMessageHandler {
@@ -51,7 +51,7 @@ impl MessageHandler for DataBuilderMessageHandler {
 }
 
 struct CommandMessageHandler {
-    data: RefCell<Vec<String>>,
+    data: Rc<RefCell<Vec<String>>>,
 }
 
 impl MessageHandler for CommandMessageHandler {
@@ -75,7 +75,7 @@ impl MessageHandler for CommandMessageHandler {
 
 fn main() {
     let mut context = MessageBusContext::new();
-    let data = RefCell::new(Vec::new());
+    let data = Rc::new(RefCell::new(Vec::new()));
     let data_builder = DataBuilderMessageHandler { data: data.clone() };
     let command_handler = CommandMessageHandler { data };
     context.register_handler("data_builder".to_string(), Box::new(data_builder));
@@ -103,6 +103,15 @@ fn main() {
         assert_eq!(inner_state.data.borrow().as_ref(), vec!["hello", "world"]);
     }
 
+    {
+        let handler = context.handlers.get("command").unwrap().as_ref();
+        let inner_state: &CommandMessageHandler =
+            unsafe { &*(handler as *const dyn MessageHandler as *const CommandMessageHandler) };
+
+        // check that data was added
+        assert_eq!(inner_state.data.borrow().as_ref(), vec!["hello", "world"]);
+    }
+
     context.handle_message(
         "command",
         Box::new(CommandEvent {
@@ -120,6 +129,15 @@ fn main() {
         assert_eq!(inner_state.data.borrow().as_ref(), vec!["hello"]);
     }
 
+    {
+        let handler = context.handlers.get("command").unwrap().as_ref();
+        let inner_state: &CommandMessageHandler =
+            unsafe { &*(handler as *const dyn MessageHandler as *const CommandMessageHandler) };
+
+        // check that data was added
+        assert_eq!(inner_state.data.borrow().as_ref(), vec!["hello", "world"]);
+    }
+
     context.handle_message(
         "command",
         Box::new(CommandEvent {
@@ -134,6 +152,15 @@ fn main() {
         };
 
         // check that last element was popped
+        assert_eq!(inner_state.data.borrow().as_ref(), Vec::<String>::new());
+    }
+
+    {
+        let handler = context.handlers.get("command").unwrap().as_ref();
+        let inner_state: &CommandMessageHandler =
+            unsafe { &*(handler as *const dyn MessageHandler as *const CommandMessageHandler) };
+
+        // check that data was added
         assert_eq!(inner_state.data.borrow().as_ref(), Vec::<String>::new());
     }
 }
