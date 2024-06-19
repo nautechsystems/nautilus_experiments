@@ -1,4 +1,10 @@
-use std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    any::Any,
+    cell::RefCell,
+    collections::HashMap,
+    panic::{self, AssertUnwindSafe},
+    rc::Rc,
+};
 
 trait MessageHandler {
     fn handle(&mut self, message: &dyn Any);
@@ -47,10 +53,17 @@ impl MessageHandler for DataBuilderMessageHandler {
         if let Some(MessageEvent { name }) = message.downcast_ref::<MessageEvent>() {
             self.data.push(name.clone());
 
-            // send count to a different handler
-            self.context
-                .borrow()
-                .handle_message("count", Box::new(CountEvent { value: name.len() }));
+            // test for self call panic
+            if name.len() == 0 {
+                self.context
+                    .borrow()
+                    .handle_message("data_builder", Box::new(CountEvent { value: name.len() }));
+            } else {
+                // send count to a different handler
+                self.context
+                    .borrow()
+                    .handle_message("count", Box::new(CountEvent { value: name.len() }));
+            }
         }
     }
 }
@@ -122,4 +135,18 @@ fn main() {
         // check that data was added
         assert_eq!(inner_state.data.as_ref(), vec![5, 5]);
     }
+
+    panic::set_hook(Box::new(|_info| {
+        // do nothing
+    }));
+    let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+        // data handler calls data handler for string of length 0 and panics
+        context.borrow().handle_message(
+            "data_builder",
+            Box::new(MessageEvent {
+                name: "".to_string(),
+            }),
+        );
+    }));
+    assert!(result.is_err());
 }
