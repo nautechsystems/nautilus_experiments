@@ -19,7 +19,7 @@ class PythonHandler:
         self.context.py_send(id, SendEvent(val))
 
     def start_chain(self, val):
-        self.context.py_chain(self.id(), ChainEvent(val, self.id()))
+        self.context.py_chain(self.id(), ChainEvent(self.id(), val))
 
     def handle(self, event):
         if isinstance(event, SendEvent):
@@ -28,13 +28,15 @@ class PythonHandler:
             self.data.append(event.data)
 
             next = self.id() + 1
+
+            # if next doesn't exist, send to first handler next
+            if not self.context.check_handler(next):
+                next = 0
+
+            # if next is the starting handler stop chain to prevent borrow mut error
             if next != event.start:
-                # Send to next handler if it exists
-                if self.context.check_handler(next):
-                    self.context.py_chain(next, event)
-                # Otherwise send to the first handler
-                else:
-                    self.context.py_chain(0, event)
+                print(f"Sending chain event to {next}")
+                self.context.py_chain(next, event)
         else:
             print(f"Unknown event type {event.__class__.__name__}")
 
@@ -55,8 +57,12 @@ if __name__ == "__main__":
     assert rust_handler_1.get_data() == [49]
     assert rust_handler_2.get_data() == [51]
 
-    # python_handler.start_chain(42)
+    context.py_chain(1, ChainEvent(1, 42))
+    assert python_handler.data == [42]
+    assert rust_handler_1.get_data() == [49, 42]
+    assert rust_handler_2.get_data() == [51, 42]
 
-    # assert python_handler.data == [42]
-    # assert rust_handler_1.get_data() == [49, 42]
-    # assert rust_handler_2.get_data() == [51, 42]
+    python_handler.start_chain(99)
+    assert python_handler.data == [42, 99]
+    assert rust_handler_1.get_data() == [49, 42, 99]
+    assert rust_handler_2.get_data() == [51, 42, 99]
