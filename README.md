@@ -1,34 +1,37 @@
 # Death by row groups
 
-Use the python script to extract row group information from the parquet files using pyarrow.
+The parquet file is sorted on the `ts_init` column. We want to stream data from the file in ascending order of `ts_init`. However, we do not want to sort the data in-memory since it is already sorted. To achieve this we use the following datafusion configuration.
 
-```bash
-pip install -r requirements.txt
-python extract_ts_init.py 126-groups.parquet 126-groups-python.csv
-python extract_ts_init.py 127-groups.parquet 127-groups-python.csv
+```rust
+    let session_cfg =
+        SessionConfig::new().set_str("datafusion.optimizer.repartition_file_scans", "false");
+    let session_ctx = SessionContext::new_with_config(session_cfg);
+    let parquet_options = ParquetReadOptions::<'_> {
+        skip_metadata: Some(false),
+        file_sort_order: vec![vec![Expr::Sort(Sort {
+            expr: Box::new(col("ts_init")),
+            asc: true,
+            nulls_first: false,
+        })]],
+        ..Default::default()
+    };
+```
+
+This works well when there is no filter clause in the query. The below commands will pass.
+
+```
+cargo run 127-groups.parquet > 127-groups-rust.csv
+python check_invariant.py 127-groups-rust.csv
+```
+
+However, when there is a filter clause in the query. The row groups are not read in-order causing the ascending order invariant to fail.
+
+```
+cargo run 127-groups.parquet filter > 127-groups-rust.csv
+python check_invariant.py 127-groups-rust.csv #fail
 ```
 
 Run the rust executable to extract row group information from the parquet files using datafusion.
-
-```bash
-cargo run 126-groups.parquet > 126-groups-rust.csv
-cargo run 127-groups.parquet > 127-groups-rust.csv
-```
-
-Ideally there should be no difference between the csv files for the row groups. However, 126 works properly. But 127 gives different results for Python and Rust.
-
-This shows that indeed there's no difference with 126 groups.
-
-```bash
-diff 126-groups-rust.csv 126-groups-python.csv # no diff
-diff 126-groups-rust.csv 126-groups-python.csv # big diff, things crazy
-```
-
-We can also make sure that these are in fact from the same data source with just one extra row group with this command which shows 127 groups python has only one extra entry at the end.
-
-```bash
-diff 126-groups-python.csv 127-groups-python.csv
-```
 
 # Helper utils
 

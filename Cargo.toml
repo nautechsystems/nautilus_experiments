@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 datafusion = "38.0.0"
 futures = "0.3.30"
-tokio = "1.37.0"
+tokio = { version = "1.37.0", features = ["rt-multi-thread"] }

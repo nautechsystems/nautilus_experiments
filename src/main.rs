@@ -1,4 +1,4 @@
-use std::env::args;
+use std::env::{self, args};
 
 use datafusion::arrow::array::{Int64Array, UInt64Array};
 use datafusion::arrow::{
@@ -28,13 +28,15 @@ pub fn extract_column<'a, T: Array + 'static>(
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    let session_ctx = SessionContext::default();
+    let session_cfg =
+        SessionConfig::new().set_str("datafusion.optimizer.repartition_file_scans", "false");
+    let session_ctx = SessionContext::new_with_config(session_cfg);
     let parquet_options = ParquetReadOptions::<'_> {
         skip_metadata: Some(false),
         file_sort_order: vec![vec![Expr::Sort(Sort {
             expr: Box::new(col("ts_init")),
             asc: true,
-            nulls_first: true,
+            nulls_first: false,
         })]],
         ..Default::default()
     };
@@ -45,7 +47,14 @@ async fn main() {
         .await
         .unwrap();
 
-    let df = session_ctx.sql("SELECT * FROM data").await.unwrap();
+    // Set filter option in query
+    let filter_query = env::args().find(|v| v == "filter").is_some();
+    let df = if filter_query {
+        session_ctx.sql("SELECT * FROM data where ts_init >= 1701388832486000000 AND ts_init <= 1701392194001000000").await.unwrap()
+    } else {
+        session_ctx.sql("SELECT * FROM data").await.unwrap()
+    };
+
     let mut stream = df.execute_stream().await.unwrap().enumerate();
 
     println!("index,start_ts,end_ts,group_size");
