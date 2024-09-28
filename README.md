@@ -8,11 +8,11 @@ The parquet file is sorted on the `ts_init` column. We want to stream data from 
     let session_ctx = SessionContext::new_with_config(session_cfg);
     let parquet_options = ParquetReadOptions::<'_> {
         skip_metadata: Some(false),
-        file_sort_order: vec![vec![Expr::Sort(Sort {
-            expr: Box::new(col("ts_init")),
+        file_sort_order: vec![vec![datafusion_expr::SortExpr {
+            expr: col("ts_init"),
             asc: true,
             nulls_first: false,
-        })]],
+        }]],
         ..Default::default()
     };
 ```
