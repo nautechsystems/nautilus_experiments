@@ -17,9 +17,9 @@ async fn main() {
     };
     // Set sql query ordering clause
     let sql_query = if env::args().find(|v| v == "order").is_some() {
-        "SELECT * FROM data ORDER BY ts_init"
+        "SELECT * FROM data ORDER BY ts_init WHERE ts_init >= 1667254476063075072"
     } else {
-        "SELECT * FROM data"
+        "SELECT * FROM data where ts_init >= 1667254476063075072"
     };
     // Explain query
     let explain = if env::args().find(|v| v == "explain").is_some() {
@@ -28,20 +28,23 @@ async fn main() {
         false
     };
 
-    let session_cfg = SessionConfig::new().set_str(
-        "datafusion.optimizer.repartition_file_scans",
-        repartition_file_scan,
-    );
+    let session_cfg = SessionConfig::new()
+        .set_str(
+            "datafusion.optimizer.repartition_file_scans",
+            repartition_file_scan,
+        )
+        .set_str("datafusion.optimizer.prefer_existing_sort", "true");
     let session_ctx = SessionContext::new_with_config(session_cfg);
     let parquet_options = ParquetReadOptions::<'_> {
         skip_metadata: Some(false),
-        file_sort_order: vec![vec![Expr::Sort(Sort {
-            expr: Box::new(col("ts_init")),
+        file_sort_order: vec![vec![datafusion_expr::SortExpr {
+            expr: col("ts_init"),
             asc: true,
-            nulls_first: true,
-        })]],
+            nulls_first: false,
+        }]],
         ..Default::default()
     };
+
     session_ctx
         .register_parquet("data", &file_path, parquet_options)
         .await
@@ -49,7 +52,7 @@ async fn main() {
     let query = session_ctx.sql(sql_query).await.unwrap();
 
     if explain {
-        let explain = query.explain(true, true).unwrap();
+        let explain = query.explain(false, false).unwrap();
         println!("{:#?}", explain);
     } else {
         let mut batch_stream = query.execute_stream().await.unwrap();

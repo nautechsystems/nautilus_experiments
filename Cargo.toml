@@ -6,6 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-datafusion = "38.0.0"
+datafusion = "42.0.0"
+datafusion-expr = "42.0.0"
 futures = "0.3.30"
-tokio = { version = "1.38.0", features = ["rt-multi-thread"] }
+tokio = { version = "1.40.0", features = ["rt-multi-thread"] }
