@@ -18,7 +18,7 @@ import pickle
 from experiments.data.objects import TradeTick
 
 def test_pickling_trade():
-    data = TradeTick(340282366920938463463374607431768211455)
+    data = TradeTick(340282366920938463463374607431768211455, -1)
 
     pickled = pickle.dumps(data)
     unpickled = pickle.loads(pickled)
@@ -26,7 +26,7 @@ def test_pickling_trade():
     assert data == unpickled
 
 def test_pickling_fail():
-    data = TradeTick(340282366920938463463374607431768211456)
+    data = TradeTick(340282366920938463463374607431768211456, -1)
 
     pickled = pickle.dumps(data)
     unpickled = pickle.loads(pickled)

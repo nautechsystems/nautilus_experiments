@@ -56,6 +56,7 @@ fn main() {
 
         if line.trim().starts_with("cdef extern from") && !found_extern {
             output.push_str("    ctypedef unsigned long long uint128_t\n");
+            output.push_str("    ctypedef long long int128_t\n");
             found_extern = true;
         }
     }
