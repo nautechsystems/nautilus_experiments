@@ -7,6 +7,7 @@ tab_width = 4
 
 [cython]
 header = '"core.h"'
+cimports = "ctypedef unsigned long long uint128_t"
 
 [cython.cimports]
 "libc.stdint" = [
@@ -21,4 +22,4 @@ header = '"core.h"'
 [export.rename]
 "Ustr" = "char*"
 "TradeTick" = "TradeTick_t"
-"TradeId" = "TradeId_t"
+"u128" = "uint128_t"

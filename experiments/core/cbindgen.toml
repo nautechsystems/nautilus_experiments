@@ -5,8 +5,10 @@ includes = []
 sys_includes = ["stdint.h", "Python.h"]
 no_includes = true
 tab_width = 4
+after_includes = "\n#ifdef __SIZEOF_INT128__\n    typedef __uint128_t uint128_t;\n#else\n#    error \"128-bit integer not supported on this platform\"\n#endif"
 
 [export.rename]
 "Ustr" = "char*"
 "TradeTick" = "TradeTick_t"
 "TradeId" = "TradeId_t"
+"u128" = "uint128_t"

@@ -4,11 +4,12 @@ from cpython.object cimport PyObject
 from libc.stdint cimport uint64_t, uint8_t
 
 cdef extern from "core.h":
+    ctypedef unsigned long long uint128_t
 
     # Represents a single quote tick in a financial market.
     cdef struct TradeTick_t:
-        u128 ts_event;
+        uint128_t ts_event;
 
-    TradeTick_t trade_tick_new(u128 ts_event);
+    TradeTick_t trade_tick_new(uint128_t ts_event);
 
     uint8_t trade_tick_eq(const TradeTick_t *lhs, const TradeTick_t *rhs);
