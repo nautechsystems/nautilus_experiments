@@ -1,8 +1,6 @@
-cdef extern from "core.h":
-    ctypedef unsigned long long uint128_t
-
 from experiments.data.rust.core cimport trade_tick_new
 from experiments.data.rust.core cimport trade_tick_eq
+from experiments.data.rust.core cimport uint128_t
 
 cdef class TradeTick:
     def __init__(

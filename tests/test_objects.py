@@ -15,20 +15,21 @@
 
 import pickle
 
-from experiments.data.objects import TradeTick, TradeId
+from experiments.data.objects import TradeTick
 
-def test_pickling_tradeid():
-    data = TradeId("Hello world")
-    
+def test_pickling_trade():
+    data = TradeTick(340282366920938463463374607431768211455)
+
     pickled = pickle.dumps(data)
     unpickled = pickle.loads(pickled)
 
     assert data == unpickled
 
-def test_pickling_trade():
-    data = TradeTick(TradeId("Hello world"), 0, 0)
-    
+def test_pickling_fail():
+    data = TradeTick(340282366920938463463374607431768211456)
+
     pickled = pickle.dumps(data)
     unpickled = pickle.loads(pickled)
 
+    # failure expected
     assert data == unpickled

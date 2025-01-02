@@ -7,7 +7,6 @@ tab_width = 4
 
 [cython]
 header = '"core.h"'
-cimports = "ctypedef unsigned long long uint128_t"
 
 [cython.cimports]
 "libc.stdint" = [
