@@ -21,7 +21,7 @@ generate-setup-file = false
 
 [tool.poetry.dependencies]
 python = ">=3.9,<3.11"
-cython = "3.0.0a11"
+cython = "3.1.0a1"
 
 [tool.poetry.dev-dependencies]
 pytest = "^7.1.3"

@@ -3,14 +3,22 @@
 from cpython.object cimport PyObject
 from libc.stdint cimport uint64_t, uint8_t
 
+DEF DEFINE_HIGH_PRECISION = True  # or False
+
 cdef extern from "core.h":
     ctypedef unsigned long long uint128_t
     ctypedef long long int128_t
+
+    IF not DEFINE_HIGH_PRECISION:
+        const uint64_t MAX # = 100
 
     # Represents a single quote tick in a financial market.
     cdef struct TradeTick_t:
         uint128_t ts_event;
         int128_t ts_init;
+
+    IF DEFINE_HIGH_PRECISION:
+        const uint128_t MAX # = 100
 
     TradeTick_t trade_tick_new(uint128_t ts_event, int128_t ts_init);
 
