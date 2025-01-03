@@ -79,7 +79,7 @@ Options.annotate = ANNOTATION_MODE  # Create annotated HTML files for each .pyx
 if ANNOTATION_MODE:
     Options.annotate_coverage_xml = "coverage.xml"
 Options.fast_fail = True  # Abort compilation on first error
-Options.warning_errors = False  # Treat compiler warnings as errors
+Options.warning_errors = True  # Treat compiler warnings as errors
 Options.extra_warnings = True
 
 CYTHON_COMPILER_DIRECTIVES = {
@@ -89,6 +89,7 @@ CYTHON_COMPILER_DIRECTIVES = {
     "profile": PROFILE_MODE,  # If we're debugging or profiling
     "linetrace": PROFILE_MODE,  # If we're debugging or profiling
     "warn.maybe_uninitialized": True,
+    "warn.deprecated.IF": False,
 }
 
 
