@@ -3,7 +3,7 @@
 from cpython.object cimport PyObject
 from libc.stdint cimport uint64_t, uint8_t
 
-DEF DEFINE_HIGH_PRECISION = True  # or False
+DEF DEFINE_HIGH_PRECISION = False  # or True
 
 cdef extern from "core.h":
     ctypedef unsigned long long uint128_t
@@ -18,7 +18,7 @@ cdef extern from "core.h":
         int128_t ts_init;
 
     IF DEFINE_HIGH_PRECISION:
-        const uint128_t MAX # = 100
+        const uint128_t MAX # = 50
 
     TradeTick_t trade_tick_new(uint128_t ts_event, int128_t ts_init);
 

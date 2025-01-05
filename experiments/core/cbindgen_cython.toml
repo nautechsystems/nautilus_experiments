@@ -4,7 +4,7 @@ includes = []
 sys_includes = ["stdint.h", "Python.h"]
 no_includes = true
 tab_width = 4
-after_includes = "\nDEF DEFINE_HIGH_PRECISION = True  # or False"
+after_includes = "\nDEF DEFINE_HIGH_PRECISION = False  # or True"
 
 [defines]
 "feature = high_precision" = "DEFINE_HIGH_PRECISION"

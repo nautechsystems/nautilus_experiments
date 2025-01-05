@@ -1,7 +1,7 @@
 #[cfg(not(feature = "high_precision"))]
 pub const MAX: u64 = 100;
 #[cfg(feature = "high_precision")]
-pub const MAX: u128 = 100;
+pub const MAX: u128 = 50;
 
 /// Represents a single quote tick in a financial market.
 #[repr(C)]
