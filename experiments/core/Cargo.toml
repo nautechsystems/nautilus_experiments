@@ -14,8 +14,6 @@ ustr = "0.10.0"
 
 [features]
 extension-module = ["pyo3/extension-module"]
-default = ["high_precision"]
-high_precision = []
 
 [build-dependencies]
 cbindgen = "0.24.3"
