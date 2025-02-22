@@ -9,6 +9,7 @@ name = "core"
 crate-type = ["rlib", "staticlib"]
 
 [dependencies]
+futures = "0.3.31"
 pyo3 = { version = "0.17.2" }
 ustr = "0.10.0"
 
