@@ -23,8 +23,9 @@ pub enum Command {
         msg: Box<dyn Any>,
     },
     RegisterHandler {
+        topic: String,
         // The closure is executed with a mutable reference to the MessageBus.
-        registration: Box<dyn FnOnce(&mut MessageBus)>,
+        registration: Box<dyn Fn(String) -> Pin<Box<ActorCoroutine>>>,
     },
 }
 
@@ -129,8 +130,11 @@ impl MessageBus {
                         Command::Send { topic, msg } => {
                             self.send_dynamic(&topic, msg);
                         }
-                        Command::RegisterHandler { registration } => {
-                            registration(self);
+                        Command::RegisterHandler {
+                            topic,
+                            registration,
+                        } => {
+                            self.register_handler(&topic, registration);
                         }
                     }
                     // The coroutine is not done; push it back to resume later.
@@ -166,22 +170,15 @@ mod tests {
                     move || {
                         if msg == "start" {
                             yield Command::RegisterHandler {
-                                registration: Box::new(|bus: &mut MessageBus| {
+                                topic: "print_topic".to_string(),
+                                registration: Box::new(|msg: String| {
                                     // Dynamically register a bool handler on "print_topic"
-                                    bus.register_handler(
-                                        "print_topic",
-                                        Box::new(|msg: String| {
-                                            Box::pin(
-                                                #[coroutine]
-                                                move || {
-                                                    println!(
-                                                        "Dynamic bool handler received: {}",
-                                                        msg
-                                                    );
-                                                },
-                                            )
-                                        }),
-                                    );
+                                    Box::pin(
+                                        #[coroutine]
+                                        move || {
+                                            println!("Dynamic bool handler received: {}", msg);
+                                        },
+                                    )
                                 }),
                             };
                             // Then send a boolean message.
