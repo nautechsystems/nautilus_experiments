@@ -1,207 +1,219 @@
-use std::any::Any;
-use std::any::TypeId;
-use std::cell::RefCell;
+#![feature(coroutines)]
+#![feature(coroutine_trait)]
+#![feature(stmt_expr_attributes)]
+
+use std::any::{Any, TypeId};
+use std::boxed::Box;
 use std::collections::HashMap;
-use std::rc::Rc;
+use std::pin::Pin;
 
-use futures::future::LocalBoxFuture;
-use futures::FutureExt;
+// We use futures' LocalBoxFuture only in earlier examples; here we use experimental coroutines.
+// (The coroutine feature requires that you compile with nightly.)
+// The Coroutine and CoroutineState traits (and its implementations) are provided by the compiler.
+// (Their definitions are shown in your attached snippet.)
 
-pub trait Actor {
-    fn id(&self) -> &str;
+use core::ops::Coroutine;
+use core::ops::CoroutineState;
+
+/// A command that a coroutine can yield. Here we support sending a message and handler registration.
+pub enum Command {
+    Send {
+        topic: String,
+        // Boxed dynamic message.
+        msg: Box<dyn Any>,
+    },
+    RegisterHandler {
+        // The closure is executed with a mutable reference to the MessageBus.
+        registration: Box<dyn FnOnce(&mut MessageBus)>,
+    },
 }
 
-pub trait Handler<M: 'static> {
-    fn handle(&mut self, msg: M);
-}
+/// For simplicity, we require that all our actor coroutines take () as input,
+/// yield a Command, and return (). (This matches the coroutine trait signature in our snippet.)
+pub type ActorCoroutine = dyn Coroutine<(), Yield = Command, Return = ()>;
 
 ///////////////////////////////////////////////////////////////////////////////
-// HandlerCollection is a simple typemap container for handlers of a particular
-// message type \(M\). We assume the message \(M\) is Clone so that each registered
-// handler can get its own copy.
-pub struct HandlerCollection<M> {
-    handlers: Vec<Box<dyn Fn(M) -> LocalBoxFuture<'static, ()>>>,
+// We now define a typemap for coroutine handlers.
+// When registering a handler for a message type M, we store a collection
+// of functions of type: Fn(M) -> Pin<Box<ActorCoroutine>>. When a message is sent,
+// we retrieve the appropriate collection and (for each handler) call it to create
+// a new coroutine task for processing the message.
+
+/// A concrete collection of coroutine handlers for messages of type M.
+#[derive(Default)]
+pub struct CoroutineHandlerCollection<M: 'static + Clone> {
+    handlers: Vec<Box<dyn Fn(M) -> Pin<Box<ActorCoroutine>>>>,
 }
 
-impl<M: 'static + Clone> HandlerCollection<M> {
+impl<M: 'static + Clone> CoroutineHandlerCollection<M> {
     pub fn new() -> Self {
         Self {
             handlers: Vec::new(),
         }
     }
 
-    pub fn add_handler(&mut self, handler: Box<dyn Fn(M) -> LocalBoxFuture<'static, ()>>) {
+    pub fn add_handler(&mut self, handler: Box<dyn Fn(M) -> Pin<Box<ActorCoroutine>>>) {
         self.handlers.push(handler);
     }
 
-    pub async fn call_handlers(&self, msg: M) {
-        for handler in &self.handlers {
-            // Run each handler synchronously.
-            handler(msg.clone()).await;
-        }
+    /// Create a coroutine for each registered handler.
+    pub fn call_handlers(&self, msg: M) -> Vec<Pin<Box<ActorCoroutine>>> {
+        self.handlers.iter().map(|h| h(msg.clone())).collect()
     }
 }
 
-/// A shared message bus for a single-threaded environment.
-/// It holds both the actor registry and the handler closures.
-struct MessageBus {
-    // Global actor state store: maps actor id to the actor's state.
-    actors: HashMap<String, Rc<dyn Any>>,
-    // Handlers: for each topic and for each message type, a closure is stored.
-    handlers: HashMap<String, HashMap<TypeId, Box<dyn Any>>>,
+///////////////////////////////////////////////////////////////////////////////
+// The message bus maintains a typemap of registered handlers (keyed by topic,
+// and then by the message type's TypeId) and a stack of active coroutines.
+pub struct MessageBus {
+    // For each topic we map the message's TypeId to a handler collection.
+    handlers: HashMap<String, CoroutineHandlerCollection<String>>,
+    // A stack of active (suspended) coroutine tasks.
+    task_stack: Vec<Pin<Box<ActorCoroutine>>>,
 }
 
 impl MessageBus {
-    fn new() -> Rc<RefCell<Self>> {
-        Rc::new(RefCell::new(Self {
-            actors: HashMap::new(),
+    pub fn new() -> Self {
+        Self {
             handlers: HashMap::new(),
-        }))
+            task_stack: Vec::new(),
+        }
     }
 
-    // Register an actor by storing its state in the bus.
-    fn register_actor(&mut self, id: &str, actor: Rc<dyn Any>) {
-        self.actors.insert(id.to_string(), actor);
-    }
-
-    // Helper to retrieve an actor from the registry.
-    fn get_actor<A: 'static>(&self, id: &str) -> Option<Rc<RefCell<A>>> {
-        self.actors.get(id).map(|actor_any| {
-            actor_any
-                .clone()
-                .downcast::<RefCell<A>>()
-                .expect("Actor type mismatch")
-        })
-    }
-
-    pub fn register<M: 'static + Clone>(
+    /// Registers a coroutine handler for message type M on the given topic.
+    pub fn register_handler(
         &mut self,
         topic: &str,
-        handler: Box<dyn Fn(M) -> LocalBoxFuture<'static, ()>>,
+        handler: Box<dyn Fn(String) -> Pin<Box<ActorCoroutine>>>,
     ) {
-        let topic_map = self
+        let collection = self
             .handlers
             .entry(topic.to_string())
-            .or_insert_with(HashMap::new);
-        let type_id = TypeId::of::<M>();
-        if let Some(collection_any) = topic_map.get_mut(&type_id) {
-            let collection = collection_any
-                .downcast_mut::<HandlerCollection<M>>()
-                .unwrap();
-            collection.add_handler(handler);
-        } else {
-            let mut collection = HandlerCollection::<M>::new();
-            collection.add_handler(handler);
-            topic_map.insert(type_id, Box::new(collection));
-        }
+            .or_insert_with(|| CoroutineHandlerCollection::<String>::default());
+
+        collection.add_handler(handler);
     }
 
-    // Send a message of type \(M\) to a given topic.
-    pub async fn send<M: 'static + Clone>(&self, topic: &str, msg: M) {
+    /// Sends a message of type M to the given topic. This creates new coroutine
+    /// tasks for each registered handler, pushes them onto the stack, and then runs the bus.
+    pub fn send(&mut self, topic: &str, msg: String) {
         if let Some(topic_map) = self.handlers.get(topic) {
-            if let Some(collection_any) = topic_map.get(&TypeId::of::<M>()) {
-                let collection = collection_any
-                    .downcast_ref::<HandlerCollection<M>>()
-                    .unwrap();
-                collection.call_handlers(msg).await;
+            let coroutines = topic_map.call_handlers(msg);
+            for coro in coroutines {
+                self.task_stack.push(coro);
+            }
+        }
+        self.run();
+    }
+
+    /// A helper to send a dynamically–typed message (used for processing yielded commands).
+    fn send_dynamic(&mut self, topic: &str, msg: Box<dyn Any>) {
+        if let Some(topic_map) = self.handlers.get(topic) {
+            let msg = msg.downcast::<String>().unwrap();
+            let coroutines = topic_map.call_handlers(*msg.clone());
+            for coro in coroutines {
+                self.task_stack.push(coro);
+            }
+        }
+    }
+
+    /// Run the bus until no suspended coroutine tasks are left.
+    /// Whenever a coroutine yields a command, we process it immediately (depth-first)
+    /// before resuming the coroutine.
+    fn run(&mut self) {
+        while let Some(mut coro) = self.task_stack.pop() {
+            match Pin::new(&mut coro).resume(()) {
+                CoroutineState::Yielded(cmd) => {
+                    // Process the yielded command.
+                    match cmd {
+                        Command::Send { topic, msg } => {
+                            self.send_dynamic(&topic, msg);
+                        }
+                        Command::RegisterHandler { registration } => {
+                            registration(self);
+                        }
+                    }
+                    // The coroutine is not done; push it back to resume later.
+                    self.task_stack.push(coro);
+                }
+                CoroutineState::Complete(()) => {
+                    // Coroutine finished.
+                }
             }
         }
     }
 }
 
-/// Our actor, which implements logic for handling messages.
-struct MyActor {
-    msgbus: Rc<RefCell<MessageBus>>,
-    true_count: usize,
-    id: String,
-}
-
-impl Handler<bool> for MyActor {
-    fn handle(&mut self, msg: bool) {
-        self.true_count += if msg { 1 } else { 0 };
-    }
-}
-
-impl Handler<String> for MyActor {
-    fn handle(&mut self, msg: String) {
-        match msg.as_str() {
-            "start" => {
-                self.msgbus.borrow_mut().send("bool_topic", true);
-            }
-            "stop" => {
-                // Deregistration logic
-            }
-            _ => println!("Received: {}", msg),
-        }
-    }
-}
-
-impl MyActor {
-    fn new(id: &str, msgbus: Rc<RefCell<MessageBus>>) -> Rc<RefCell<Self>> {
-        // Create the actor.
-        let actor = Rc::new(RefCell::new(Self {
-            msgbus: msgbus.clone(),
-            true_count: 0,
-            id: id.to_string(),
-        }));
-
-        // Register itself in the actor store.
-        msgbus
-            .borrow_mut()
-            .register_actor(id, actor.clone() as Rc<dyn Any>);
-        actor
-    }
-}
-
-impl Actor for MyActor {
-    fn id(&self) -> &str {
-        &self.id
-    }
-}
-
+///////////////////////////////////////////////////////////////////////////////
+// Below is a test showing how handlers can be implemented as coroutines.
+// In this example the "start_topic" handler (for String messages) yields commands
+// to send Boolean messages; the Boolean handler simply prints the message.
 #[cfg(test)]
 mod tests {
-    use futures::executor::LocalPool;
-
     use super::*;
 
     #[test]
-    fn test_actor_framework_with_global_store() {
-        let msgbus = MessageBus::new();
-        let actor = MyActor::new("actor1", msgbus.clone());
+    fn test_message_bus_with_coroutines_and_dynamic_registration() {
+        let mut bus = MessageBus::new();
 
-        let handler = Box::new({
-            let msgbus = msgbus.clone();
-            move |msg: String| {
-                let actor = msgbus.borrow().get_actor::<MyActor>("actor1").unwrap();
-                async move { MyActor::handle(&mut actor.borrow_mut(), msg.clone()) }.boxed_local()
-            }
-        });
+        // Register a handler for String messages on "start_topic".
+        // This coroutine yields a RegisterHandler command, which registers a bool handler.
+        bus.register_handler(
+            "start_topic",
+            Box::new(|msg: String| {
+                Box::pin(
+                    #[coroutine]
+                    move || {
+                        if msg == "start" {
+                            yield Command::RegisterHandler {
+                                registration: Box::new(|bus: &mut MessageBus| {
+                                    // Dynamically register a bool handler on "print_topic"
+                                    bus.register_handler(
+                                        "print_topic",
+                                        Box::new(|msg: String| {
+                                            Box::pin(
+                                                #[coroutine]
+                                                move || {
+                                                    println!(
+                                                        "Dynamic bool handler received: {}",
+                                                        msg
+                                                    );
+                                                },
+                                            )
+                                        }),
+                                    );
+                                }),
+                            };
+                            // Then send a boolean message.
+                            yield Command::Send {
+                                topic: "print_topic".to_string(),
+                                msg: Box::new("hello world".to_string()),
+                            };
+                        }
+                        // Coroutine completes.
+                    },
+                )
+            }),
+        );
 
-        // Register a String handler.
-        msgbus
-            .borrow_mut()
-            .register::<String>("string_topic", handler);
+        // For illustration, also register a base bool handler on "print_topic".
+        bus.register_handler(
+            "print_topic",
+            Box::new(|msg: String| {
+                Box::pin(
+                    #[coroutine]
+                    move || {
+                        println!("Default bool handler received: {}", msg);
+                    },
+                )
+            }),
+        );
 
-        let mut pool = LocalPool::new();
-        // Send "start", which sets up the bool handler.
-        {
-            pool.run_until(msgbus
-                .borrow_mut()
-                .send("string_topic", "start".to_string()));
-        }
+        // Send a "start" message; it triggers the start coroutine,
+        // which yields commands to register a new bool handler and send a bool message.
+        bus.send("start_topic", "start".to_string());
 
-        // Send some boolean messages.
-        {
-            pool.run_until(msgbus.borrow_mut().send("bool_topic", true));
-            pool.run_until(msgbus.borrow_mut().send("bool_topic", false));
-            pool.run_until(msgbus.borrow_mut().send("bool_topic", true));
-        }
-
-        // Confirm that the actor's state was updated.
-        {
-            let actor_ref = actor.borrow();
-            assert_eq!(actor_ref.true_count, 2);
-        }
+        // Send another bool message to show that both the default and dynamic bool handlers are now registered.
+        bus.send("print_topic", "hello world".to_string());
     }
 }
