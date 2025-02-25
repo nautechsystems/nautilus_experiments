@@ -1,6 +1,7 @@
 #![feature(coroutines)]
 #![feature(coroutine_trait)]
 #![feature(stmt_expr_attributes)]
+#![feature(trait_alias)]
 
 use std::any::{Any, TypeId};
 use std::boxed::Box;
@@ -22,16 +23,46 @@ pub enum Command {
         // Boxed dynamic message.
         msg: Box<dyn Any>,
     },
-    RegisterHandler {
-        topic: String,
-        // The closure is executed with a mutable reference to the MessageBus.
-        registration: Box<dyn Fn(String) -> Pin<Box<ActorCoroutine>>>,
+    Publish {
+        pattern: String,
+        msg: Box<dyn Any>,
     },
+    /// Register an endpoint subscription
+    Register(Subscription),
+    /// Deregister an endpoint subscription
+    Deregister(String),
+    /// Subscribe to a topic
+    Subscribe(Subscription),
+    /// Unsubscribe from a topic
+    Unsubscribe((String, String)),
 }
 
-/// For simplicity, we require that all our actor coroutines take () as input,
-/// yield a Command, and return (). (This matches the coroutine trait signature in our snippet.)
-pub type ActorCoroutine = dyn Coroutine<(), Yield = Command, Return = ()>;
+pub trait Handler = Coroutine<Box<dyn Any>, Yield = Command, Return = ()>;
+pub type HandlerFn = Box<dyn Fn() -> Pin<Box<dyn Handler>>>;
+
+pub struct Subscription {
+    /// The shareable message handler for the subscription.
+    pub handler_fn: HandlerFn,
+    /// Store a copy of the handler ID for faster equality checks.
+    pub handler_id: String,
+    /// The topic for the subscription.
+    pub topic: String,
+    /// The priority for the subscription determines the ordering of handlers receiving
+    /// messages being processed, higher priority handlers will receive messages before
+    /// lower priority handlers.
+    pub priority: u8,
+}
+
+impl From<HandlerFn> for Subscription {
+    fn from(handler_fn: HandlerFn) -> Self {
+        Self {
+            handler_fn,
+            handler_id: "".to_string(),
+            topic: "".to_string(),
+            priority: 0,
+        }
+    }
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // We now define a typemap for coroutine handlers.
@@ -40,108 +71,78 @@ pub type ActorCoroutine = dyn Coroutine<(), Yield = Command, Return = ()>;
 // we retrieve the appropriate collection and (for each handler) call it to create
 // a new coroutine task for processing the message.
 
-/// A concrete collection of coroutine handlers for messages of type M.
-#[derive(Default)]
-pub struct CoroutineHandlerCollection<M: 'static + Clone> {
-    handlers: Vec<Box<dyn Fn(M) -> Pin<Box<ActorCoroutine>>>>,
-}
-
-impl<M: 'static + Clone> CoroutineHandlerCollection<M> {
-    pub fn new() -> Self {
-        Self {
-            handlers: Vec::new(),
-        }
-    }
-
-    pub fn add_handler(&mut self, handler: Box<dyn Fn(M) -> Pin<Box<ActorCoroutine>>>) {
-        self.handlers.push(handler);
-    }
-
-    /// Create a coroutine for each registered handler.
-    pub fn call_handlers(&self, msg: M) -> Vec<Pin<Box<ActorCoroutine>>> {
-        self.handlers.iter().map(|h| h(msg.clone())).collect()
-    }
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 // The message bus maintains a typemap of registered handlers (keyed by topic,
 // and then by the message type's TypeId) and a stack of active coroutines.
 pub struct MessageBus {
     // For each topic we map the message's TypeId to a handler collection.
-    handlers: HashMap<String, CoroutineHandlerCollection<String>>,
+    endpoints: HashMap<String, Subscription>,
     // A stack of active (suspended) coroutine tasks.
-    task_stack: Vec<Pin<Box<ActorCoroutine>>>,
+    task_stack: Vec<(Pin<Box<dyn Handler>>, Box<dyn Any>)>,
 }
 
 impl MessageBus {
     pub fn new() -> Self {
         Self {
-            handlers: HashMap::new(),
+            endpoints: HashMap::new(),
             task_stack: Vec::new(),
         }
     }
 
     /// Registers a coroutine handler for message type M on the given topic.
-    pub fn register_handler(
-        &mut self,
-        topic: &str,
-        handler: Box<dyn Fn(String) -> Pin<Box<ActorCoroutine>>>,
-    ) {
-        let collection = self
-            .handlers
-            .entry(topic.to_string())
-            .or_insert_with(|| CoroutineHandlerCollection::<String>::default());
+    pub fn register(&mut self, subscription: Subscription) {
+        self.endpoints
+            .insert(subscription.topic.clone(), subscription);
+    }
 
-        collection.add_handler(handler);
+    pub fn deregister(&mut self, topic: &str) {
+        self.endpoints.remove(topic);
     }
 
     /// Sends a message of type M to the given topic. This creates new coroutine
-    /// tasks for each registered handler, pushes them onto the stack, and then runs the bus.
-    pub fn send(&mut self, topic: &str, msg: String) {
-        if let Some(topic_map) = self.handlers.get(topic) {
-            let coroutines = topic_map.call_handlers(msg);
-            for coro in coroutines {
-                self.task_stack.push(coro);
-            }
+    /// task for the endpoint handler and pushes it onto the stack.
+    pub fn send(&mut self, topic: &str, msg: Box<dyn Any>) {
+        if let Some(subscription) = self.endpoints.get(topic) {
+            let handler = (subscription.handler_fn)();
+            self.task_stack.push((handler, msg));
+        } else {
+            panic!("No subscription found for topic: {}", topic);
         }
-        self.run();
     }
 
-    /// A helper to send a dynamically–typed message (used for processing yielded commands).
-    fn send_dynamic(&mut self, topic: &str, msg: Box<dyn Any>) {
-        if let Some(topic_map) = self.handlers.get(topic) {
-            let msg = msg.downcast::<String>().unwrap();
-            let coroutines = topic_map.call_handlers(*msg.clone());
-            for coro in coroutines {
-                self.task_stack.push(coro);
-            }
-        }
+    pub fn push(&mut self, handler: Pin<Box<dyn Handler>>, msg: Box<dyn Any>) {
+        self.task_stack.push((handler, msg));
+    }
+
+    pub fn pop(&mut self) -> Option<(Pin<Box<dyn Handler>>, Box<dyn Any>)> {
+        self.task_stack.pop()
     }
 
     /// Run the bus until no suspended coroutine tasks are left.
     /// Whenever a coroutine yields a command, we process it immediately (depth-first)
     /// before resuming the coroutine.
     fn run(&mut self) {
-        while let Some(mut coro) = self.task_stack.pop() {
-            match Pin::new(&mut coro).resume(()) {
+        while let Some((mut coro, msg)) = self.task_stack.pop() {
+            match Pin::new(&mut coro).resume(msg) {
                 CoroutineState::Yielded(cmd) => {
                     // Process the yielded command.
                     match cmd {
                         Command::Send { topic, msg } => {
-                            self.send_dynamic(&topic, msg);
+                            self.send(&topic, msg);
                         }
-                        Command::RegisterHandler {
-                            topic,
-                            registration,
-                        } => {
-                            self.register_handler(&topic, registration);
+                        Command::Register(subscription) => {
+                            println!("Registering handler");
+                            self.register(subscription);
                         }
+                        Command::Deregister(topic) => {
+                            self.deregister(&topic);
+                        }
+                        _ => {}
                     }
-                    // The coroutine is not done; push it back to resume later.
-                    self.task_stack.push(coro);
                 }
-                CoroutineState::Complete(()) => {
+                CoroutineState::Complete(_) => {
                     // Coroutine finished.
+                    break;
                 }
             }
         }
@@ -162,25 +163,29 @@ mod tests {
 
         // Register a handler for String messages on "start_topic".
         // This coroutine yields a RegisterHandler command, which registers a bool handler.
-        bus.register_handler(
-            "start_topic",
-            Box::new(|msg: String| {
+        bus.register(Subscription {
+            topic: "start_topic".to_string(),
+            handler_fn: Box::new(|| {
                 Box::pin(
                     #[coroutine]
-                    move || {
+                    move |msg: Box<dyn Any>| {
+                        let msg = msg.downcast_ref::<String>().unwrap();
                         if msg == "start" {
-                            yield Command::RegisterHandler {
+                            yield Command::Register(Subscription {
                                 topic: "print_topic".to_string(),
-                                registration: Box::new(|msg: String| {
+                                handler_fn: Box::new(|| {
                                     // Dynamically register a bool handler on "print_topic"
                                     Box::pin(
                                         #[coroutine]
-                                        move || {
+                                        move |msg: Box<dyn Any>| {
+                                            let msg = msg.downcast_ref::<String>().unwrap();
                                             println!("Dynamic bool handler received: {}", msg);
                                         },
                                     )
                                 }),
-                            };
+                                handler_id: "dynamic_bool_handler".to_string(),
+                                priority: 0,
+                            });
                             // Then send a boolean message.
                             yield Command::Send {
                                 topic: "print_topic".to_string(),
@@ -191,26 +196,35 @@ mod tests {
                     },
                 )
             }),
-        );
+            handler_id: "start_topic_handler".to_string(),
+            priority: 0,
+        });
+        bus.run();
 
         // For illustration, also register a base bool handler on "print_topic".
-        bus.register_handler(
-            "print_topic",
-            Box::new(|msg: String| {
+        bus.register(Subscription {
+            topic: "print_topic".to_string(),
+            handler_fn: Box::new(|| {
                 Box::pin(
                     #[coroutine]
-                    move || {
+                    move |msg: Box<dyn Any>| {
+                        let msg = msg.downcast_ref::<String>().unwrap();
                         println!("Default bool handler received: {}", msg);
                     },
                 )
             }),
-        );
+            handler_id: "print_topic_handler".to_string(),
+            priority: 0,
+        });
+        bus.run();
 
         // Send a "start" message; it triggers the start coroutine,
         // which yields commands to register a new bool handler and send a bool message.
-        bus.send("start_topic", "start".to_string());
+        bus.send("start_topic", Box::new("start".to_string()));
+        bus.run();
 
         // Send another bool message to show that both the default and dynamic bool handlers are now registered.
-        bus.send("print_topic", "hello world".to_string());
+        bus.send("print_topic", Box::new("hello world".to_string()));
+        bus.run();
     }
 }
