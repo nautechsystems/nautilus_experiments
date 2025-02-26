@@ -50,6 +50,16 @@ pub struct PublishTask {
     idx: usize,
 }
 
+impl Display for PublishTask {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(
+            f,
+            "PublishTask(pattern: {}, idx: {})",
+            self.pattern, self.idx
+        )
+    }
+}
+
 impl PublishTask {
     pub fn new(pattern: String, msg: Rc<dyn Any>) -> Self {
         Self {
@@ -66,27 +76,40 @@ impl PublishTask {
             .iter()
             .filter(|(_sub, pattern)| pattern.contains(&self.pattern))
             .map(|(sub, _)| sub)
-            .take(self.idx)
-            .last();
+            .nth(self.idx);
 
-        if sub.is_none() {
-            None
-        } else {
+        sub.map(|sub| {
             self.idx += 1;
-            let actor_fn = (sub.unwrap().actor_fn)();
-            Some(SendTask::new(actor_fn, self.msg.clone()))
-        }
+            println!(
+                "publish to pattern {}, task id: {}, sub: {}",
+                self.pattern, sub.handler_id, sub
+            );
+            let actor_fn = (sub.actor_fn)();
+            Some(SendTask::new(
+                self.pattern.clone(),
+                actor_fn,
+                self.msg.clone(),
+            ))
+        })
+        .flatten()
     }
 }
 
 pub struct SendTask {
+    pattern: String,
     coro: ActorCoroutine,
     msg: Rc<dyn Any>,
 }
 
+impl Display for SendTask {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "SendTask: {}", self.pattern)
+    }
+}
+
 impl SendTask {
-    pub fn new(coro: ActorCoroutine, msg: Rc<dyn Any>) -> Self {
-        Self { coro, msg }
+    pub fn new(pattern: String, coro: ActorCoroutine, msg: Rc<dyn Any>) -> Self {
+        Self { pattern, coro, msg }
     }
 
     pub fn resume(&mut self) -> CoroutineState<Command, ()> {
@@ -100,10 +123,30 @@ pub enum Task {
     Publish(PublishTask),
 }
 
+impl Display for Task {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Task::Send(send) => writeln!(f, "{}", send),
+            Task::Publish(publish) => writeln!(f, "{}", publish),
+        }
+    }
+}
+
 #[derive(Default)]
 pub struct TaskRunner {
-    tasks: Vec<Task>,
-    msg_bus: MessageBus,
+    pub tasks: Vec<Task>,
+    pub msg_bus: MessageBus,
+}
+
+impl Display for TaskRunner {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "TaskRunner")?;
+        writeln!(f, "tasks:")?;
+        for task in &self.tasks {
+            writeln!(f, "{}", task)?;
+        }
+        Ok(())
+    }
 }
 
 impl TaskRunner {
@@ -134,7 +177,7 @@ impl TaskRunner {
                                     println!("Sending message");
                                     if let Some(sub) = self.msg_bus.endpoints.get(&topic) {
                                         let coro = (sub.actor_fn)();
-                                        self.push(Task::Send(SendTask::new(coro, msg)));
+                                        self.push(Task::Send(SendTask::new(topic, coro, msg)));
                                     }
                                 }
                                 Command::Register(subscription) => {
@@ -211,6 +254,21 @@ pub struct MessageBus {
     subscriptions: HashMap<Subscription, String>,
 }
 
+impl Display for MessageBus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Messagebus")?;
+        writeln!(f, "endpoints:")?;
+        for (topic, sub) in &self.endpoints {
+            writeln!(f, "{}: {}", topic, sub)?;
+        }
+        writeln!(f, "subscriptions:")?;
+        for (sub, topic) in &self.subscriptions {
+            writeln!(f, "{}: {}", sub, topic)?;
+        }
+        Ok(())
+    }
+}
+
 impl MessageBus {
     pub fn new() -> Self {
         Self {
@@ -251,108 +309,115 @@ impl MessageBus {
     }
 }
 
-///////////////////////////////////////////////////////////////////////////////
-// Below is a test showing how handlers can be implemented as coroutines.
-// In this example the "start_topic" handler (for String messages) yields commands
-// to send Boolean messages; the Boolean handler simply prints the message.
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
+    use std::rc::Rc;
 
+    /// Test 1: Register an endpoint, send messages, then deregister.
     #[test]
-    fn test_message_bus_with_coroutines_and_dynamic_registration() {
+    fn test_register_deregister_and_send() {
+        let counter = Rc::new(RefCell::new(0));
+        let counter_clone = counter.clone();
+
         let mut bus = MessageBus::new();
 
-        // Register a handler for String messages on "start_topic".
-        // This coroutine yields a RegisterHandler command, which registers a bool handler.
+        // Register an endpoint which increments our counter.
         bus.register(Subscription {
-            topic: "start_topic".to_string(),
-            actor_fn: Box::new(|| {
+            topic: "endpoint_topic".to_string(),
+            actor_fn: Box::new(move || {
+                let counter = counter.clone();
                 Box::pin(
                     #[coroutine]
-                    move |msg: Rc<dyn Any>| {
-                        let msg = msg.downcast_ref::<String>().unwrap();
-                        if msg == "start" {
-                            yield Command::Register(Subscription {
-                                topic: "print_topic".to_string(),
-                                actor_fn: Box::new(|| {
-                                    // Dynamically register a bool handler on "print_topic"
-                                    Box::pin(
-                                        #[coroutine]
-                                        move |msg: Rc<dyn Any>| {
-                                            let msg = msg.downcast_ref::<String>().unwrap();
-                                            println!("Dynamic bool handler received: {}", msg);
-                                        },
-                                    )
-                                }),
-                                handler_id: "dynamic_bool_handler".to_string(),
-                                priority: 0,
-                            });
-                            // Then send a boolean message.
-                            yield Command::Send {
-                                topic: "print_topic".to_string(),
-                                msg: Rc::new("hello world".to_string()),
-                            };
-                        }
-                        // Coroutine completes.
+                    move |_msg: Rc<dyn Any>| {
+                        *counter.borrow_mut() += 1;
                     },
                 )
             }),
-            handler_id: "start_topic_handler".to_string(),
+            handler_id: "ep1".to_string(),
             priority: 0,
         });
-        bus.send("start_topic", Rc::new("start".to_string()));
-        bus.run();
-        println!(
-            "endpoints: {}",
-            bus.endpoints
-                .values()
-                .map(|s| s.to_string())
-                .collect::<Vec<String>>()
-                .join(", ")
-        );
 
-        // For illustration, also register a base bool handler on "print_topic".
-        bus.register(Subscription {
-            topic: "print_topic".to_string(),
-            actor_fn: Box::new(|| {
+        // Send a message and run.
+        let task = Task::Send(SendTask::new(
+            "endpoint_topic".to_string(),
+            (bus.endpoints["endpoint_topic"].actor_fn)(),
+            Rc::new(()),
+        ));
+        let mut runner = TaskRunner::new();
+        runner.push(task);
+        runner.run();
+        assert_eq!(*counter_clone.borrow(), 1);
+
+        // Now deregister the endpoint and try to send another message.
+        bus.deregister("endpoint_topic");
+        // Message won't be delivered since endpoint is gone
+        assert_eq!(*counter_clone.borrow(), 1);
+    }
+
+    /// Test 2: Subscribe multiple handlers, send messages, unsubscribe one and test interleaving.
+    #[test]
+    fn test_subscribe_multiple_and_unsubscribe() {
+        let counter1 = Rc::new(RefCell::new(0));
+        let counter2 = Rc::new(RefCell::new(0));
+        let sub_counter1 = counter1.clone();
+        let sub_counter2 = counter2.clone();
+
+        let mut runner = TaskRunner::new();
+
+        // Register two subscriptions on the same topic.
+        runner.msg_bus.subscribe(Subscription {
+            topic: "pubsub_topic".to_string(),
+            actor_fn: Box::new(move || {
+                let value = sub_counter1.clone();
                 Box::pin(
                     #[coroutine]
-                    move |msg: Rc<dyn Any>| {
-                        let msg = msg.downcast_ref::<String>().unwrap();
-                        println!("Default bool handler received: {}", msg);
+                    move |_msg: Rc<dyn Any>| {
+                        *value.borrow_mut() += 1;
                     },
                 )
             }),
-            handler_id: "print_topic_handler".to_string(),
+            handler_id: "sub1".to_string(),
             priority: 0,
         });
-        bus.send("print_topic", Rc::new("hello world".to_string()));
-        bus.run();
-        println!(
-            "endpoints: {}",
-            bus.endpoints
-                .values()
-                .map(|s| s.to_string())
-                .collect::<Vec<String>>()
-                .join(", ")
-        );
+        runner.msg_bus.subscribe(Subscription {
+            topic: "pubsub_topic".to_string(),
+            actor_fn: Box::new(move || {
+                let mut value = sub_counter2.clone();
+                Box::pin(
+                    #[coroutine]
+                    move |_msg: Rc<dyn Any>| {
+                        *value.borrow_mut() += 1;
+                    },
+                )
+            }),
+            handler_id: "sub2".to_string(),
+            priority: 0,
+        });
+        println!("{}", runner);
 
-        // Send a "start" message; it triggers the start coroutine,
-        // which yields commands to register a new bool handler and send a bool message.
-        bus.send("start_topic", Rc::new("start".to_string()));
-        bus.run();
-        println!(
-            "endpoints: {}",
-            bus.endpoints
-                .values()
-                .map(|s| s.to_string())
-                .collect::<Vec<String>>()
-                .join(", ")
-        );
+        // Send a message; both subscriptions should process it.
+        runner.push(Task::Publish(PublishTask::new(
+            "pubsub_topic".to_string(),
+            Rc::new(()),
+        )));
+        println!("{}", runner);
+        runner.run();
+        println!("{}", runner);
+        assert_eq!(*counter1.borrow(), 1);
+        assert_eq!(*counter2.borrow(), 1);
 
-        // Send another bool message to show that both the default and dynamic bool handlers are now registered.
-        bus.send("print_topic", Rc::new("hello world".to_string()));
-        bus.run();
+        // Unsubscribe the first subscription.
+        runner.msg_bus.remove_subscription("pubsub_topic", "sub1");
+
+        // Send another message; only the second subscription should process it.
+        runner.push(Task::Publish(PublishTask::new(
+            "pubsub_topic".to_string(),
+            Rc::new(()),
+        )));
+        runner.run();
+        assert_eq!(*counter1.borrow(), 1);
+        assert_eq!(*counter2.borrow(), 2);
     }
 }
