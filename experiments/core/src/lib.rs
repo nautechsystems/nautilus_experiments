@@ -80,10 +80,6 @@ impl PublishTask {
 
         sub.map(|sub| {
             self.idx += 1;
-            println!(
-                "publish to pattern {}, task id: {}, sub: {}",
-                self.pattern, sub.handler_id, sub
-            );
             let actor_fn = (sub.actor_fn)();
             Some(SendTask::new(
                 self.pattern.clone(),
@@ -165,51 +161,54 @@ impl TaskRunner {
         self.tasks.pop()
     }
 
-    pub fn run(&mut self) {
-        while let Some(task) = self.tasks.last_mut() {
-            match task {
-                Task::Send(send) => {
-                    match send.resume() {
-                        CoroutineState::Yielded(cmd) => {
-                            // Process the yielded command.
-                            match cmd {
-                                Command::Send { topic, msg } => {
-                                    println!("Sending message");
-                                    if let Some(sub) = self.msg_bus.endpoints.get(&topic) {
-                                        let coro = (sub.actor_fn)();
-                                        self.push(Task::Send(SendTask::new(topic, coro, msg)));
-                                    }
-                                }
-                                Command::Register(subscription) => {
-                                    println!("Registering handler");
-                                    self.msg_bus.register(subscription);
-                                }
-                                Command::Deregister(topic) => {
-                                    self.msg_bus.deregister(&topic);
-                                }
-                                Command::Subscribe(subscription) => {
-                                    self.msg_bus.subscribe(subscription);
-                                }
-                                Command::Unsubscribe((topic, handler_id)) => {
-                                    self.msg_bus.remove_subscription(&topic, &handler_id);
-                                }
-                                Command::Publish { pattern, msg } => {
-                                    self.push(Task::Publish(PublishTask::new(pattern, msg)));
+    pub fn step(&mut self) {
+        match self.tasks.last_mut() {
+            Some(Task::Send(send)) => {
+                match send.resume() {
+                    CoroutineState::Yielded(cmd) => {
+                        // Process the yielded command.
+                        match cmd {
+                            Command::Send { topic, msg } => {
+                                if let Some(sub) = self.msg_bus.endpoints.get(&topic) {
+                                    let coro = (sub.actor_fn)();
+                                    self.push(Task::Send(SendTask::new(topic, coro, msg)));
                                 }
                             }
-                        }
-                        CoroutineState::Complete(_) => {
-                            self.tasks.pop();
+                            Command::Register(subscription) => {
+                                self.msg_bus.register(subscription);
+                            }
+                            Command::Deregister(topic) => {
+                                self.msg_bus.deregister(&topic);
+                            }
+                            Command::Subscribe(subscription) => {
+                                self.msg_bus.subscribe(subscription);
+                            }
+                            Command::Unsubscribe((topic, handler_id)) => {
+                                self.msg_bus.remove_subscription(&topic, &handler_id);
+                            }
+                            Command::Publish { pattern, msg } => {
+                                self.push(Task::Publish(PublishTask::new(pattern, msg)));
+                            }
                         }
                     }
-                }
-                Task::Publish(publish) => match publish.next_task(&self.msg_bus) {
-                    Some(send) => self.push(Task::Send(send)),
-                    None => {
+                    CoroutineState::Complete(_) => {
                         self.tasks.pop();
                     }
-                },
+                }
             }
+            Some(Task::Publish(publish)) => match publish.next_task(&self.msg_bus) {
+                Some(send) => self.push(Task::Send(send)),
+                None => {
+                    self.tasks.pop();
+                }
+            },
+            None => {}
+        }
+    }
+
+    pub fn run(&mut self) {
+        while !self.tasks.is_empty() {
+            self.step();
         }
     }
 }
@@ -384,7 +383,7 @@ mod tests {
         runner.msg_bus.subscribe(Subscription {
             topic: "pubsub_topic".to_string(),
             actor_fn: Box::new(move || {
-                let mut value = sub_counter2.clone();
+                let value = sub_counter2.clone();
                 Box::pin(
                     #[coroutine]
                     move |_msg: Rc<dyn Any>| {
@@ -395,16 +394,13 @@ mod tests {
             handler_id: "sub2".to_string(),
             priority: 0,
         });
-        println!("{}", runner);
 
         // Send a message; both subscriptions should process it.
         runner.push(Task::Publish(PublishTask::new(
             "pubsub_topic".to_string(),
             Rc::new(()),
         )));
-        println!("{}", runner);
         runner.run();
-        println!("{}", runner);
         assert_eq!(*counter1.borrow(), 1);
         assert_eq!(*counter2.borrow(), 1);
 
@@ -419,5 +415,374 @@ mod tests {
         runner.run();
         assert_eq!(*counter1.borrow(), 1);
         assert_eq!(*counter2.borrow(), 2);
+    }
+}
+
+#[cfg(test)]
+mod property_tests {
+    use super::*;
+    use proptest::prelude::*;
+    use std::cell::RefCell;
+    use std::fmt;
+    use std::rc::Rc;
+
+    // Simplified trace events - just Enter and Exit
+    #[derive(Debug, Clone, PartialEq)]
+    enum TraceEvent {
+        Enter(String), // Enter handler with ID
+        Exit(String),  // Exit handler with ID
+    }
+
+    impl fmt::Display for TraceEvent {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                TraceEvent::Enter(id) => write!(f, "ENTER: {}", id),
+                TraceEvent::Exit(id) => write!(f, "EXIT: {}", id),
+            }
+        }
+    }
+
+    // Function to verify a trace is well-formed (proper nesting)
+    fn is_well_formed(trace: &[TraceEvent]) -> bool {
+        let mut stack = Vec::new();
+
+        for event in trace {
+            match event {
+                TraceEvent::Enter(id) => {
+                    stack.push(id.clone());
+                }
+                TraceEvent::Exit(id) => {
+                    if stack.pop() != Some(id.clone()) {
+                        return false; // Mismatched exit
+                    }
+                }
+            }
+        }
+
+        stack.is_empty() // Stack should be empty at the end
+    }
+
+    // Create a handler that records trace events and performs configured actions
+    fn create_tracing_handler(
+        id: String,
+        topic: String,
+        sends: Vec<String>,
+        publishes: Vec<String>,
+        registers: Vec<(String, String)>,
+        deregisters: Vec<String>,
+        trace: Rc<RefCell<Vec<TraceEvent>>>,
+    ) -> Subscription {
+        let id_clone = id.clone();
+        Subscription {
+            topic: topic.clone(),
+            actor_fn: Box::new(move || {
+                let id = id.clone();
+                let trace = trace.clone();
+                let sends = sends.clone();
+                let publishes = publishes.clone();
+                let registers = registers.clone();
+                let deregisters = deregisters.clone();
+
+                Box::pin(
+                    #[coroutine]
+                    static move |_msg: Rc<dyn Any>| {
+                        // Record entry
+                        trace.borrow_mut().push(TraceEvent::Enter(id.clone()));
+
+                        // Process sends
+                        for to_topic in &sends {
+                            yield Command::Send {
+                                topic: to_topic.clone(),
+                                msg: Rc::new(()),
+                            };
+                        }
+
+                        // Process publishes
+                        for pattern in &publishes {
+                            yield Command::Publish {
+                                pattern: pattern.clone(),
+                                msg: Rc::new(()),
+                            };
+                        }
+
+                        // Process registers (dynamic handler registration)
+                        for (reg_id, reg_topic) in &registers {
+                            let new_handler = create_tracing_handler(
+                                reg_id.clone(),
+                                reg_topic.clone(),
+                                vec![], // Simple handlers for this example
+                                vec![],
+                                vec![],
+                                vec![],
+                                trace.clone(),
+                            );
+                            yield Command::Register(new_handler);
+                        }
+
+                        // Process deregisters
+                        for dereg_topic in &deregisters {
+                            yield Command::Deregister(dereg_topic.clone());
+                        }
+
+                        // Record exit
+                        trace.borrow_mut().push(TraceEvent::Exit(id.clone()));
+                    },
+                )
+            }),
+            handler_id: id_clone,
+            priority: 0,
+        }
+    }
+
+    // Test 1: Static handlers with send chain (A -> B -> C)
+    #[test]
+    fn test_static_send_chain() {
+        let trace = Rc::new(RefCell::new(Vec::new()));
+        let mut runner = TaskRunner::new();
+
+        // Register handler C
+        runner.msg_bus.register(create_tracing_handler(
+            "C".to_string(),
+            "topic_c".to_string(),
+            vec![], // C doesn't send anywhere
+            vec![],
+            vec![],
+            vec![],
+            trace.clone(),
+        ));
+
+        // Register handler B (sends to C)
+        runner.msg_bus.register(create_tracing_handler(
+            "B".to_string(),
+            "topic_b".to_string(),
+            vec!["topic_c".to_string()], // B sends to C
+            vec![],
+            vec![],
+            vec![],
+            trace.clone(),
+        ));
+
+        // Register handler A (sends to B)
+        runner.msg_bus.register(create_tracing_handler(
+            "A".to_string(),
+            "topic_a".to_string(),
+            vec!["topic_b".to_string()], // A sends to B
+            vec![],
+            vec![],
+            vec![],
+            trace.clone(),
+        ));
+
+        // Start the process with a message to A
+        runner.push(Task::Send(SendTask::new(
+            "topic_a".to_string(),
+            (runner.msg_bus.endpoints["topic_a"].actor_fn)(),
+            Rc::new(()),
+        )));
+
+        // Run and verify
+        runner.run();
+
+        // Expected trace: A enters, B enters, C enters, C exits, B exits, A exits
+        let expected_trace = vec![
+            TraceEvent::Enter("A".to_string()),
+            TraceEvent::Enter("B".to_string()),
+            TraceEvent::Enter("C".to_string()),
+            TraceEvent::Exit("C".to_string()),
+            TraceEvent::Exit("B".to_string()),
+            TraceEvent::Exit("A".to_string()),
+        ];
+
+        assert_eq!(
+            *trace.borrow(),
+            expected_trace,
+            "Trace mismatch: {:?}",
+            *trace.borrow()
+        );
+        assert!(is_well_formed(&trace.borrow()), "Trace is not well-formed");
+    }
+
+    // Test 2: Static handlers with tree structure (A -> B, C; B -> D, E)
+    #[test]
+    fn test_static_tree_structure() {
+        let trace = Rc::new(RefCell::new(Vec::new()));
+        let mut runner = TaskRunner::new();
+
+        // Register leaf handlers
+        runner.msg_bus.register(create_tracing_handler(
+            "D".to_string(),
+            "topic_d".to_string(),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            trace.clone(),
+        ));
+
+        runner.msg_bus.register(create_tracing_handler(
+            "E".to_string(),
+            "topic_e".to_string(),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            trace.clone(),
+        ));
+
+        runner.msg_bus.register(create_tracing_handler(
+            "C".to_string(),
+            "topic_c".to_string(),
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            trace.clone(),
+        ));
+
+        // Register B (sends to D and E)
+        runner.msg_bus.register(create_tracing_handler(
+            "B".to_string(),
+            "topic_b".to_string(),
+            vec!["topic_d".to_string(), "topic_e".to_string()],
+            vec![],
+            vec![],
+            vec![],
+            trace.clone(),
+        ));
+
+        // Register A (sends to B and C)
+        runner.msg_bus.register(create_tracing_handler(
+            "A".to_string(),
+            "topic_a".to_string(),
+            vec!["topic_b".to_string(), "topic_c".to_string()],
+            vec![],
+            vec![],
+            vec![],
+            trace.clone(),
+        ));
+
+        // Start with A
+        runner.push(Task::Send(SendTask::new(
+            "topic_a".to_string(),
+            (runner.msg_bus.endpoints["topic_a"].actor_fn)(),
+            Rc::new(()),
+        )));
+
+        // Run and verify
+        runner.run();
+
+        // Expected trace: A enters, B enters, C enters, C exits, B exits, A exits
+        let expected_trace = vec![
+            TraceEvent::Enter("A".to_string()),
+            TraceEvent::Enter("B".to_string()),
+            TraceEvent::Enter("D".to_string()),
+            TraceEvent::Exit("D".to_string()),
+            TraceEvent::Enter("E".to_string()),
+            TraceEvent::Exit("E".to_string()),
+            TraceEvent::Exit("B".to_string()),
+            TraceEvent::Enter("C".to_string()),
+            TraceEvent::Exit("C".to_string()),
+            TraceEvent::Exit("A".to_string()),
+        ];
+
+        assert!(
+            is_well_formed(&trace.borrow()),
+            "Trace is not well-formed: {:?}",
+            *trace.borrow()
+        );
+
+        assert_eq!(
+            *trace.borrow(),
+            expected_trace,
+            "Trace mismatch: {:?}",
+            *trace.borrow()
+        );
+    }
+
+    // Test 3: Dynamic registration (A registers B, then sends to B)
+    #[test]
+    fn test_dynamic_registration() {
+        let trace = Rc::new(RefCell::new(Vec::new()));
+        let mut runner = TaskRunner::new();
+
+        // Register A (will dynamically register B)
+        runner.msg_bus.register(create_tracing_handler(
+            "A".to_string(),
+            "topic_a".to_string(),
+            vec!["topic_b".to_string()], // A sends to B after registering it
+            vec![],
+            vec![("B".to_string(), "topic_b".to_string())], // A registers B
+            vec![],
+            trace.clone(),
+        ));
+
+        // Start with A
+        runner.push(Task::Send(SendTask::new(
+            "topic_a".to_string(),
+            (runner.msg_bus.endpoints["topic_a"].actor_fn)(),
+            Rc::new(()),
+        )));
+
+        // Run and verify
+        runner.run();
+
+        // Expected: A enters, registers B, sends to B, B enters, B exits, A exits
+        assert!(trace.borrow().contains(&TraceEvent::Enter("A".to_string())));
+        assert!(trace.borrow().contains(&TraceEvent::Enter("B".to_string())));
+        assert!(trace.borrow().contains(&TraceEvent::Exit("B".to_string())));
+        assert!(trace.borrow().contains(&TraceEvent::Exit("A".to_string())));
+
+        assert!(
+            is_well_formed(&trace.borrow()),
+            "Trace is not well-formed: {:?}",
+            *trace.borrow()
+        );
+    }
+
+    // Test 4: Deregistration (A registers B, deregisters B, tries to send to B)
+    #[test]
+    fn test_deregistration() {
+        let trace = Rc::new(RefCell::new(Vec::new()));
+        let mut runner = TaskRunner::new();
+
+        // Register A (will register B, deregister B, then try to send to B)
+        runner.msg_bus.register(create_tracing_handler(
+            "A".to_string(),
+            "topic_a".to_string(),
+            vec!["topic_b".to_string(), "topic_b".to_string()], // A sends to B twice
+            vec![],
+            vec![("B".to_string(), "topic_b".to_string())], // A registers B
+            vec!["topic_b".to_string()],                    // A deregisters B after first send
+            trace.clone(),
+        ));
+
+        // Start with A
+        runner.push(Task::Send(SendTask::new(
+            "topic_a".to_string(),
+            (runner.msg_bus.endpoints["topic_a"].actor_fn)(),
+            Rc::new(()),
+        )));
+
+        // Run and verify
+        runner.run();
+
+        // B should only be entered once (from the first send)
+        let b_enters = trace
+            .borrow()
+            .iter()
+            .filter(|&e| *e == TraceEvent::Enter("B".to_string()))
+            .count();
+
+        assert_eq!(
+            b_enters, 1,
+            "B should only be entered once, got {}",
+            b_enters
+        );
+
+        assert!(
+            is_well_formed(&trace.borrow()),
+            "Trace is not well-formed: {:?}",
+            *trace.borrow()
+        );
     }
 }

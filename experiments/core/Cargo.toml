@@ -10,6 +10,7 @@ crate-type = ["rlib", "staticlib"]
 
 [dependencies]
 futures = "0.3.31"
+proptest = "1.6.0"
 pyo3 = { version = "0.17.2" }
 
 [features]
