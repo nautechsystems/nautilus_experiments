@@ -8,6 +8,7 @@ use std::boxed::Box;
 use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Display;
+use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::rc::Rc;
 
@@ -43,12 +44,47 @@ pub enum Command {
 pub type ActorCoroutine = Pin<Box<dyn Coroutine<Rc<dyn Any>, Yield = Command, Return = ()>>>;
 pub type ActorFn = Box<dyn Fn() -> ActorCoroutine>;
 
-pub struct Handler {
+pub struct PublishTask {
+    pattern: String,
+    msg: Rc<dyn Any>,
+    idx: usize,
+}
+
+impl PublishTask {
+    pub fn new(pattern: String, msg: Rc<dyn Any>) -> Self {
+        Self {
+            pattern,
+            msg,
+            idx: 0,
+        }
+    }
+
+    // Dummy implementation
+    pub fn next_task(&mut self, msg_bus: &MessageBus) -> Option<SendTask> {
+        let sub = msg_bus
+            .subscriptions
+            .iter()
+            .filter(|(_sub, pattern)| pattern.contains(&self.pattern))
+            .map(|(sub, _)| sub)
+            .take(self.idx)
+            .last();
+
+        if sub.is_none() {
+            None
+        } else {
+            self.idx += 1;
+            let actor_fn = (sub.unwrap().actor_fn)();
+            Some(SendTask::new(actor_fn, self.msg.clone()))
+        }
+    }
+}
+
+pub struct SendTask {
     coro: ActorCoroutine,
     msg: Rc<dyn Any>,
 }
 
-impl Handler {
+impl SendTask {
     pub fn new(coro: ActorCoroutine, msg: Rc<dyn Any>) -> Self {
         Self { coro, msg }
     }
@@ -56,6 +92,82 @@ impl Handler {
     pub fn resume(&mut self) -> CoroutineState<Command, ()> {
         let msg = self.msg.clone();
         self.coro.as_mut().resume(msg)
+    }
+}
+
+pub enum Task {
+    Send(SendTask),
+    Publish(PublishTask),
+}
+
+#[derive(Default)]
+pub struct TaskRunner {
+    tasks: Vec<Task>,
+    msg_bus: MessageBus,
+}
+
+impl TaskRunner {
+    pub fn new() -> Self {
+        Self {
+            tasks: Vec::new(),
+            msg_bus: MessageBus::new(),
+        }
+    }
+
+    pub fn push(&mut self, task: Task) {
+        self.tasks.push(task);
+    }
+
+    pub fn pop(&mut self) -> Option<Task> {
+        self.tasks.pop()
+    }
+
+    pub fn run(&mut self) {
+        while let Some(task) = self.tasks.last_mut() {
+            match task {
+                Task::Send(send) => {
+                    match send.resume() {
+                        CoroutineState::Yielded(cmd) => {
+                            // Process the yielded command.
+                            match cmd {
+                                Command::Send { topic, msg } => {
+                                    println!("Sending message");
+                                    if let Some(sub) = self.msg_bus.endpoints.get(&topic) {
+                                        let coro = (sub.actor_fn)();
+                                        self.push(Task::Send(SendTask::new(coro, msg)));
+                                    }
+                                }
+                                Command::Register(subscription) => {
+                                    println!("Registering handler");
+                                    self.msg_bus.register(subscription);
+                                }
+                                Command::Deregister(topic) => {
+                                    self.msg_bus.deregister(&topic);
+                                }
+                                Command::Subscribe(subscription) => {
+                                    self.msg_bus.subscribe(subscription);
+                                }
+                                Command::Unsubscribe((topic, handler_id)) => {
+                                    self.msg_bus.remove_subscription(&topic, &handler_id);
+                                }
+                                Command::Publish { pattern, msg } => {
+                                    self.push(Task::Publish(PublishTask::new(pattern, msg)));
+                                }
+                            }
+                        }
+                        CoroutineState::Complete(_) => {
+                            self.tasks.pop();
+                        }
+                    }
+                }
+                Task::Publish(publish) => match publish.next_task(&self.msg_bus) {
+                    Some(send) => self.push(Task::Send(send)),
+                    None => {
+                        self.tasks.pop();
+                    }
+                },
+            }
+        }
     }
 }
 
@@ -72,45 +184,38 @@ pub struct Subscription {
     pub priority: u8,
 }
 
+impl Hash for Subscription {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.topic.hash(state);
+        self.handler_id.hash(state);
+    }
+}
+
+impl PartialEq for Subscription {
+    fn eq(&self, other: &Self) -> bool {
+        self.topic == other.topic && self.handler_id == other.handler_id
+    }
+}
+
+impl Eq for Subscription {}
+
 impl Display for Subscription {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "sub::{}:{}", self.topic, self.handler_id)
     }
 }
 
-impl From<ActorFn> for Subscription {
-    fn from(handler_fn: ActorFn) -> Self {
-        Self {
-            actor_fn: handler_fn,
-            handler_id: "".to_string(),
-            topic: "".to_string(),
-            priority: 0,
-        }
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////////
-// We now define a typemap for coroutine handlers.
-// When registering a handler for a message type M, we store a collection
-// of functions of type: Fn(M) -> Pin<Box<ActorCoroutine>>. When a message is sent,
-// we retrieve the appropriate collection and (for each handler) call it to create
-// a new coroutine task for processing the message.
-
-///////////////////////////////////////////////////////////////////////////////
-// The message bus maintains a typemap of registered handlers (keyed by topic,
-// and then by the message type's TypeId) and a stack of active coroutines.
+#[derive(Default)]
 pub struct MessageBus {
-    // For each topic we map the message's TypeId to a handler collection.
     endpoints: HashMap<String, Subscription>,
-    // A stack of active (suspended) coroutine tasks.
-    task_stack: Vec<Handler>,
+    subscriptions: HashMap<Subscription, String>,
 }
 
 impl MessageBus {
     pub fn new() -> Self {
         Self {
             endpoints: HashMap::new(),
-            task_stack: Vec::new(),
+            subscriptions: HashMap::new(),
         }
     }
 
@@ -124,53 +229,25 @@ impl MessageBus {
         self.endpoints.remove(topic);
     }
 
-    /// Sends a message of type M to the given topic. This creates new coroutine
-    /// task for the endpoint handler and pushes it onto the stack.
-    pub fn send(&mut self, topic: &str, msg: Rc<dyn Any>) {
-        if let Some(subscription) = self.endpoints.get(topic) {
-            let coro = (subscription.actor_fn)();
-            self.task_stack.push(Handler::new(coro, msg));
-        } else {
-            panic!("No subscription found for topic: {}", topic);
-        }
+    pub fn subscribe(&mut self, subscription: Subscription) {
+        let topic = subscription.topic.clone();
+        self.subscriptions.insert(subscription, topic);
     }
 
-    pub fn push(&mut self, handler: Handler) {
-        self.task_stack.push(handler);
-    }
-
-    pub fn pop(&mut self) -> Option<Handler> {
-        self.task_stack.pop()
-    }
-
-    /// Run the bus until no suspended coroutine tasks are left.
-    /// Whenever a coroutine yields a command, we process it immediately (depth-first)
-    /// before resuming the coroutine.
-    pub fn run(&mut self) {
-        while let Some(handler) = self.task_stack.last_mut() {
-            match handler.resume() {
-                CoroutineState::Yielded(cmd) => {
-                    // Process the yielded command.
-                    match cmd {
-                        Command::Send { topic, msg } => {
-                            println!("Sending message");
-                            self.send(&topic, msg);
-                        }
-                        Command::Register(subscription) => {
-                            println!("Registering handler");
-                            self.register(subscription);
-                        }
-                        Command::Deregister(topic) => {
-                            self.deregister(&topic);
-                        }
-                        _ => {}
-                    }
-                }
-                CoroutineState::Complete(_) => {
-                    self.task_stack.pop();
-                }
-            }
-        }
+    pub fn remove_subscription(&mut self, topic: &str, handler_id: &str) {
+        // create dummy subscription
+        let key = Subscription {
+            topic: topic.to_string(),
+            handler_id: handler_id.to_string(),
+            actor_fn: Box::new(|| {
+                Box::pin(
+                    #[coroutine]
+                    |_: Rc<dyn Any>| {},
+                )
+            }), // dummy fn
+            priority: 0,
+        };
+        self.subscriptions.remove(&key);
     }
 }
 
