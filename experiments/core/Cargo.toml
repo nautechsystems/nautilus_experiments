@@ -12,6 +12,7 @@ crate-type = ["rlib", "staticlib"]
 futures = "0.3.31"
 proptest = "1.6.0"
 pyo3 = { version = "0.17.2" }
+rand = "0.9.0"
 
 [features]
 extension-module = ["pyo3/extension-module"]
