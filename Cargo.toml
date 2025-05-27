@@ -1,9 +1,7 @@
-[workspace]
-resolver = "2"
-members = [
-    "inner",
-    "outer"
-]
+[package]
+name = "import-test"
+version = "0.1.0"
+edition = "2021"
 
-[workspace.dependencies]
-pyo3 = { version = "0.21.2", features = ["rust_decimal"] }
+[dependencies]
+pyo3 = { version = "0.25", features = ["rust_decimal", "extension-module] }
