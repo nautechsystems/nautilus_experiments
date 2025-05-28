@@ -1,7 +1,11 @@
 [package]
-name = "import-test"
+name = "pyo3_test"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "pyo3_test"
+crate-type = ["rlib", "staticlib", "cdylib"]
+
 [dependencies]
-pyo3 = { version = "0.25", features = ["rust_decimal", "extension-module] }
+pyo3 = { version = "0.25" }

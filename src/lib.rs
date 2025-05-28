@@ -1,34 +1,39 @@
-use pyo3::{
-    prelude::*,
-    types::{PyDict, PyString},
-};
+use pyo3::prelude::*;
 
-use inner::inner;
+#[pyfunction]
+fn print_hello_world() {
+    println!("Hello, world!");
+}
 
+/// We modify sys modules so that submodule can be loaded directly as
+/// import supermodule.submodule
+///
+/// Also re-exports all submodule attributes so they can be imported directly from `nautilus_pyo3`
+/// refer: <https://github.com/PyO3/pyo3/issues/2644>
 #[pymodule]
-fn outer(py: Python<'_>, m: &PyModule) -> PyResult<()> {
-    let sys = PyModule::import(py, "sys")?;
-    let sys_modules: &PyDict = sys.getattr("modules")?.downcast()?;
-    let module_name = "outer";
+fn pyo3_test(_: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(print_hello_world, m)?)?;
 
-    // Set pyo3_nautilus to be recognized as a subpackage
-    sys_modules.set_item(module_name, m)?;
+    // let sys = PyModule::import(py, "sys")?;
+    // let modules = sys.getattr("modules")?;
+    // let sys_modules: &Bound<'_, PyAny> = modules.downcast()?;
+    // let module_name = "nautilus_experiments";
 
-    let n = "inner";
-    let submodule = pyo3::wrap_pymodule!(inner);
-    m.add_wrapped(submodule)?;
-    sys_modules.set_item(format!("{module_name}.{n}"), m.getattr(n)?)?;
-    re_export_module_attributes(m, n)?;
+    // // Set pyo3_nautilus to be recognized as a subpackage
+    // sys_modules.set_item(module_name, m)?;
 
     Ok(())
 }
 
-fn re_export_module_attributes(parent_module: &PyModule, submodule_name: &str) -> PyResult<()> {
+fn re_export_module_attributes(
+    parent_module: &Bound<'_, PyModule>,
+    submodule_name: &str,
+) -> PyResult<()> {
     let submodule = parent_module.getattr(submodule_name)?;
-    for item in submodule.dir() {
-        let item_name: &PyString = item.extract()?;
-        if let Ok(attr) = submodule.getattr(item_name) {
-            parent_module.add(item_name.to_str()?, attr)?;
+    for item_name in submodule.dir()? {
+        let item_name_str: &str = item_name.extract()?;
+        if let Ok(attr) = submodule.getattr(item_name_str) {
+            parent_module.add(item_name_str, attr)?;
         }
     }
 
