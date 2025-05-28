@@ -2,7 +2,7 @@ use std::{cell::UnsafeCell, sync::OnceLock};
 
 use pyo3::prelude::*;
 
-pub struct SharedVal(Box<UnsafeCell<u64>>);
+pub struct SharedVal(Box<UnsafeCell<Vec<String>>>);
 
 // SAFETY: Cannot be sent across thread boundaries
 #[allow(unsafe_code)]
@@ -14,7 +14,7 @@ unsafe impl Sync for SharedVal {}
 pub static VALUE: OnceLock<SharedVal> = OnceLock::new();
 
 fn get_value_ref() -> &'static SharedVal {
-    VALUE.get_or_init(|| SharedVal(Box::new(UnsafeCell::new(0))))
+    VALUE.get_or_init(|| SharedVal(Box::new(UnsafeCell::new(Vec::new()))))
 }
 
 #[pyfunction]
@@ -28,13 +28,13 @@ pub fn print_value_ptr_address() {
 pub fn export_value_ptr() -> u64 {
     let val = get_value_ref();
     // Return pointer to the UnsafeCell, not its contents
-    (&*val.0) as *const UnsafeCell<u64> as u64
+    (&*val.0) as *const UnsafeCell<Vec<String>> as u64
 }
 
 #[pyfunction]
 pub fn set_value_from_ptr(addr: u64) -> PyResult<()> {
     if addr != 0 {
-        let ptr = addr as *mut UnsafeCell<u64>;
+        let ptr = addr as *mut UnsafeCell<Vec<String>>;
         if !ptr.is_null() {
             let _ = VALUE.set(SharedVal(unsafe { Box::from_raw(ptr) }));
         };
@@ -43,16 +43,16 @@ pub fn set_value_from_ptr(addr: u64) -> PyResult<()> {
 }
 
 #[pyfunction]
-pub fn get_value() -> u64 {
+pub fn get_value() -> Vec<String> {
     let val = get_value_ref();
-    unsafe { *val.0.get() }
+    unsafe { (*val.0.get()).clone() }
 }
 
 #[pyfunction]
-pub fn set_value(val: u64) {
+pub fn append_value(val: String) {
     let shared_val = get_value_ref();
     unsafe {
-        *shared_val.0.get() = val;
+        (*shared_val.0.get()).push(val);
     }
 }
 
@@ -70,7 +70,7 @@ fn print_hello_world() {
 fn pyo3_test(_: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(print_hello_world, m)?)?;
     m.add_function(wrap_pyfunction!(get_value, m)?)?;
-    m.add_function(wrap_pyfunction!(set_value, m)?)?;
+    m.add_function(wrap_pyfunction!(append_value, m)?)?;
     m.add_function(wrap_pyfunction!(export_value_ptr, m)?)?;
     m.add_function(wrap_pyfunction!(set_value_from_ptr, m)?)?;
     m.add_function(wrap_pyfunction!(print_value_ptr_address, m)?)?;

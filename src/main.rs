@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use std::ffi::CString;
-use pyo3_test::{export_value_ptr, get_value, print_value_ptr_address, set_value};
+use pyo3_test::{export_value_ptr, get_value, print_value_ptr_address, append_value};
 
 fn main() {
     let root = env!("CARGO_MANIFEST_DIR");
@@ -10,9 +10,9 @@ fn main() {
     let module = CString::new("test".to_string()).unwrap();
 
     pyo3::prepare_freethreaded_python();
-    println!("{}", get_value());
-    set_value(1);
-    println!("{}", get_value());
+    println!("{:?}", get_value());
+    append_value("1".to_string());
+    println!("{:?}", get_value());
     
     print_value_ptr_address();
     let ptr = export_value_ptr();
@@ -35,5 +35,5 @@ fn main() {
         do_method.call0().unwrap();
     });
     
-    println!("{}", get_value());
+    println!("{:?}", get_value());
 }
