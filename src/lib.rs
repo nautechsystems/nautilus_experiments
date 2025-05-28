@@ -1,4 +1,30 @@
+use std::{cell::RefCell, rc::Rc, sync::OnceLock};
+
 use pyo3::prelude::*;
+
+pub struct SharedVal(Rc<RefCell<u64>>);
+
+// SAFETY: Cannot be sent across thread boundaries
+#[allow(unsafe_code)]
+unsafe impl Send for SharedVal {}
+#[allow(unsafe_code)]
+unsafe impl Sync for SharedVal {}
+
+
+pub static VALUE: OnceLock<SharedVal> = OnceLock::new();
+
+#[pyfunction]
+pub fn get_value() -> u64 {
+    *VALUE.get_or_init(|| {
+        SharedVal(Rc::new(RefCell::new(0)))
+    }).0.borrow()
+}
+
+#[pyfunction]
+pub fn set_value(val: u64) {
+    let var = VALUE.get().unwrap();
+    *(var.0.borrow_mut()) = val;
+}
 
 #[pyfunction]
 fn print_hello_world() {
@@ -13,6 +39,8 @@ fn print_hello_world() {
 #[pymodule]
 fn pyo3_test(_: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(print_hello_world, m)?)?;
+    m.add_function(wrap_pyfunction!(get_value, m)?)?;
+    m.add_function(wrap_pyfunction!(set_value, m)?)?;
 
     // let sys = PyModule::import(py, "sys")?;
     // let modules = sys.getattr("modules")?;
