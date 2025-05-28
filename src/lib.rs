@@ -1,8 +1,8 @@
-use std::{cell::RefCell, rc::Rc, sync::OnceLock};
+use std::{cell::UnsafeCell, sync::OnceLock};
 
 use pyo3::prelude::*;
 
-pub struct SharedVal(Rc<RefCell<u64>>);
+pub struct SharedVal(Box<UnsafeCell<u64>>);
 
 // SAFETY: Cannot be sent across thread boundaries
 #[allow(unsafe_code)]
@@ -10,20 +10,50 @@ unsafe impl Send for SharedVal {}
 #[allow(unsafe_code)]
 unsafe impl Sync for SharedVal {}
 
-
+#[no_mangle]
 pub static VALUE: OnceLock<SharedVal> = OnceLock::new();
+
+fn get_value_ref() -> &'static SharedVal {
+    VALUE.get_or_init(|| SharedVal(Box::new(UnsafeCell::new(0))))
+}
+
+#[pyfunction]
+pub fn print_value_ptr_address() {
+    let val = get_value_ref();
+    let ptr = val.0.get();
+    println!("Value pointer address: {:p}", ptr);
+}
+
+#[pyfunction]
+pub fn export_value_ptr() -> u64 {
+    let val = get_value_ref();
+    // Return pointer to the UnsafeCell, not its contents
+    (&*val.0) as *const UnsafeCell<u64> as u64
+}
+
+#[pyfunction]
+pub fn set_value_from_ptr(addr: u64) -> PyResult<()> {
+    if addr != 0 {
+        let ptr = addr as *mut UnsafeCell<u64>;
+        if !ptr.is_null() {
+            let _ = VALUE.set(SharedVal(unsafe { Box::from_raw(ptr) }));
+        };
+    }
+    Ok(())
+}
 
 #[pyfunction]
 pub fn get_value() -> u64 {
-    *VALUE.get_or_init(|| {
-        SharedVal(Rc::new(RefCell::new(0)))
-    }).0.borrow()
+    let val = get_value_ref();
+    unsafe { *val.0.get() }
 }
 
 #[pyfunction]
 pub fn set_value(val: u64) {
-    let var = VALUE.get().unwrap();
-    *(var.0.borrow_mut()) = val;
+    let shared_val = get_value_ref();
+    unsafe {
+        *shared_val.0.get() = val;
+    }
 }
 
 #[pyfunction]
@@ -41,6 +71,9 @@ fn pyo3_test(_: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(print_hello_world, m)?)?;
     m.add_function(wrap_pyfunction!(get_value, m)?)?;
     m.add_function(wrap_pyfunction!(set_value, m)?)?;
+    m.add_function(wrap_pyfunction!(export_value_ptr, m)?)?;
+    m.add_function(wrap_pyfunction!(set_value_from_ptr, m)?)?;
+    m.add_function(wrap_pyfunction!(print_value_ptr_address, m)?)?;
 
     // let sys = PyModule::import(py, "sys")?;
     // let modules = sys.getattr("modules")?;
@@ -49,21 +82,6 @@ fn pyo3_test(_: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     // // Set pyo3_nautilus to be recognized as a subpackage
     // sys_modules.set_item(module_name, m)?;
-
-    Ok(())
-}
-
-fn re_export_module_attributes(
-    parent_module: &Bound<'_, PyModule>,
-    submodule_name: &str,
-) -> PyResult<()> {
-    let submodule = parent_module.getattr(submodule_name)?;
-    for item_name in submodule.dir()? {
-        let item_name_str: &str = item_name.extract()?;
-        if let Ok(attr) = submodule.getattr(item_name_str) {
-            parent_module.add(item_name_str, attr)?;
-        }
-    }
 
     Ok(())
 }
