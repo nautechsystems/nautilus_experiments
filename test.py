@@ -13,6 +13,9 @@ class Test:
         pass
 
     def do(self):
-        print_hello_world()
+        print_hello_world("Python test class do")
         print_value_ptr_address();
-        append_value("2")
+        append_value("2", self.say_hello)
+
+    def say_hello(self):
+        print("say hello from python")

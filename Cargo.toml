@@ -8,6 +8,7 @@ name = "pyo3_test"
 crate-type = ["rlib", "staticlib", "cdylib"]
 
 [dependencies]
+indexmap = "2.9.0"
 pyo3 = { version = "0.25" }
 
 [features]

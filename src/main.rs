@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use std::ffi::CString;
-use pyo3_test::{export_value_ptr, get_value, print_value_ptr_address, append_value};
+use pyo3_test::{append_value, export_value_ptr, get_value, print_hello_world, print_value_ptr_address};
 
 fn main() {
     let root = env!("CARGO_MANIFEST_DIR");
@@ -10,9 +10,8 @@ fn main() {
     let module = CString::new("test".to_string()).unwrap();
 
     pyo3::prepare_freethreaded_python();
-    println!("{:?}", get_value());
-    append_value("1".to_string());
-    println!("{:?}", get_value());
+    println!("{:?}", get_value("1"));
+    println!("{:?}", get_value("2"));
     
     print_value_ptr_address();
     let ptr = export_value_ptr();
@@ -28,12 +27,21 @@ fn main() {
 
         // Check the static variable is updated
         let get_val_method = pymod.getattr("get_value").unwrap();
-        let val = get_val_method.call0().unwrap();
-        println!("{}", val);
+        let val = get_val_method.call1(("2",)).unwrap();
+        println!("Got value from python get_value method: {}", val);
         
         let do_method = test_instance.getattr("do").unwrap();
         do_method.call0().unwrap();
+
+         // Check the static variable is updated
+        let get_val_method = pymod.getattr("get_value").unwrap();
+        let val = get_val_method.call1(("2",)).unwrap();
+        println!("Got value again from python get_value method: {}", val);
+               
+        if let Some(val) = get_value("2") {
+            val.call0(py).unwrap();
+        }
     });
     
-    println!("{:?}", get_value());
+    println!("{:?}", get_value("2"));
 }

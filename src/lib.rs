@@ -1,8 +1,9 @@
-use std::{cell::UnsafeCell, sync::OnceLock};
+use std::{cell::UnsafeCell, collections::HashMap, sync::OnceLock};
 
 use pyo3::prelude::*;
+use indexmap::IndexMap;
 
-pub struct SharedVal(Box<UnsafeCell<Vec<String>>>);
+pub struct SharedVal(Box<UnsafeCell<IndexMap<String, PyObject>>>);
 
 // SAFETY: Cannot be sent across thread boundaries
 #[allow(unsafe_code)]
@@ -14,7 +15,7 @@ unsafe impl Sync for SharedVal {}
 pub static VALUE: OnceLock<SharedVal> = OnceLock::new();
 
 fn get_value_ref() -> &'static SharedVal {
-    VALUE.get_or_init(|| SharedVal(Box::new(UnsafeCell::new(Vec::new()))))
+    VALUE.get_or_init(|| SharedVal(Box::new(UnsafeCell::new(IndexMap::new()))))
 }
 
 #[pyfunction]
@@ -28,13 +29,13 @@ pub fn print_value_ptr_address() {
 pub fn export_value_ptr() -> u64 {
     let val = get_value_ref();
     // Return pointer to the UnsafeCell, not its contents
-    (&*val.0) as *const UnsafeCell<Vec<String>> as u64
+    (&*val.0) as *const UnsafeCell<IndexMap<String, PyObject>> as u64
 }
 
 #[pyfunction]
 pub fn set_value_from_ptr(addr: u64) -> PyResult<()> {
     if addr != 0 {
-        let ptr = addr as *mut UnsafeCell<Vec<String>>;
+        let ptr = addr as *mut UnsafeCell<IndexMap<String, PyObject>>;
         if !ptr.is_null() {
             let _ = VALUE.set(SharedVal(unsafe { Box::from_raw(ptr) }));
         };
@@ -43,22 +44,22 @@ pub fn set_value_from_ptr(addr: u64) -> PyResult<()> {
 }
 
 #[pyfunction]
-pub fn get_value() -> Vec<String> {
+pub fn get_value(key: &str) -> Option<PyObject> {
     let val = get_value_ref();
-    unsafe { (*val.0.get()).clone() }
+    Python::with_gil(|py| unsafe { (*val.0.get()).get(key).map(|v| v.clone_ref(py)) })
 }
 
 #[pyfunction]
-pub fn append_value(val: String) {
+pub fn append_value(key: &str, val: PyObject) {
     let shared_val = get_value_ref();
     unsafe {
-        (*shared_val.0.get()).push(val);
+        (*shared_val.0.get()).insert(key.to_string(), val);
     }
 }
 
 #[pyfunction]
-fn print_hello_world() {
-    println!("Hello, world!");
+pub fn print_hello_world(prefix: &str) {
+    println!("{} hello world", prefix);
 }
 
 /// We modify sys modules so that submodule can be loaded directly as
