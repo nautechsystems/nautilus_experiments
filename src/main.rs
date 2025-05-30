@@ -1,13 +1,11 @@
 use pyo3::prelude::*;
 use std::ffi::CString;
-use pyo3_test::{append_value, debug_function, export_value_ptr, get_value, print_hello_world, print_value_ptr_address, ustr_from_str};
-use std::ffi::c_char;
+use pyo3_test::{append_value, export_value_ptr, get_value, print_hello_world, print_value_ptr_address};
 
 fn main() {
     // Your actual main code here
     println!("Starting program");
 
-    unsafe { debug_function(); }
     let root = env!("CARGO_MANIFEST_DIR");
     let code = std::fs::read_to_string(format!("{}/test.py", root)).unwrap();
     let code = CString::new(code).unwrap();
