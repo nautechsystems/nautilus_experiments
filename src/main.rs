@@ -1,8 +1,13 @@
 use pyo3::prelude::*;
 use std::ffi::CString;
-use pyo3_test::{append_value, export_value_ptr, get_value, print_hello_world, print_value_ptr_address};
+use pyo3_test::{append_value, debug_function, export_value_ptr, get_value, print_hello_world, print_value_ptr_address, ustr_from_str};
+use std::ffi::c_char;
 
 fn main() {
+    // Your actual main code here
+    println!("Starting program");
+
+    unsafe { debug_function(); }
     let root = env!("CARGO_MANIFEST_DIR");
     let code = std::fs::read_to_string(format!("{}/test.py", root)).unwrap();
     let code = CString::new(code).unwrap();
@@ -24,6 +29,10 @@ fn main() {
         // Set the static variable to the pointer
         let set_val_method = pymod.getattr("set_value_from_ptr").unwrap();
         set_val_method.call1((ptr,)).unwrap();
+
+        // Set the static variable to the pointer
+        let set_val_method = pymod.getattr("print_value_ptr_address").unwrap();
+        set_val_method.call0().unwrap();
 
         // Check the static variable is updated
         let get_val_method = pymod.getattr("get_value").unwrap();

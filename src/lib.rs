@@ -1,9 +1,41 @@
-use std::{cell::UnsafeCell, collections::HashMap, sync::OnceLock};
+use std::{cell::UnsafeCell, collections::HashMap, ffi::c_char, sync::OnceLock};
 
-use pyo3::prelude::*;
 use indexmap::IndexMap;
+use pyo3::prelude::*;
+use ustr::Ustr;
 
-pub struct SharedVal(Box<UnsafeCell<IndexMap<String, PyObject>>>);
+extern "C" {
+    pub fn ustr_from_str(s: *const c_char, len: usize) -> Ustr;
+    pub fn debug_function() -> i32;
+}
+
+// #[no_mangle]
+// pub extern "C" fn ustr_from_str(s: *const c_char, len: usize) -> Ustr {
+//     panic!("This should be overridden by LD_PRELOAD");
+// }
+
+// #[no_mangle]
+// pub extern "C" fn debug_function() -> i32 {
+//     panic!("This should be overridden by LD_PRELOAD");
+// }
+
+// // Add this type alias
+// type UstrFromStrFn = extern "C" fn(*const c_char, usize) -> Ustr;
+
+// Modify your wrapper function
+// pub fn ustr_from(s: &str) -> Ustr {
+//     // Get function pointer - this level of indirection helps with symbol resolution
+//     let func: UstrFromStrFn = ustr_from_str;
+//     func(s.as_ptr() as *const c_char, s.len())
+// }
+
+pub fn ustr_from(s: &str) -> Ustr {
+    // Get function pointer - this level of indirection helps with symbol resolution
+    println!("Ptr: {:p}, len: {}", s.as_ptr(), s.len());
+    unsafe { ustr_from_str(s.as_ptr() as *const c_char, s.len()) }
+}
+
+pub struct SharedVal(Box<UnsafeCell<IndexMap<Ustr, PyObject>>>);
 
 // SAFETY: Cannot be sent across thread boundaries
 #[allow(unsafe_code)]
@@ -29,13 +61,13 @@ pub fn print_value_ptr_address() {
 pub fn export_value_ptr() -> u64 {
     let val = get_value_ref();
     // Return pointer to the UnsafeCell, not its contents
-    (&*val.0) as *const UnsafeCell<IndexMap<String, PyObject>> as u64
+    (&*val.0) as *const UnsafeCell<IndexMap<Ustr, PyObject>> as u64
 }
 
 #[pyfunction]
 pub fn set_value_from_ptr(addr: u64) -> PyResult<()> {
     if addr != 0 {
-        let ptr = addr as *mut UnsafeCell<IndexMap<String, PyObject>>;
+        let ptr = addr as *mut UnsafeCell<IndexMap<Ustr, PyObject>>;
         if !ptr.is_null() {
             let _ = VALUE.set(SharedVal(unsafe { Box::from_raw(ptr) }));
         };
@@ -46,14 +78,15 @@ pub fn set_value_from_ptr(addr: u64) -> PyResult<()> {
 #[pyfunction]
 pub fn get_value(key: &str) -> Option<PyObject> {
     let val = get_value_ref();
-    Python::with_gil(|py| unsafe { (*val.0.get()).get(key).map(|v| v.clone_ref(py)) })
+    let key = ustr_from(key);
+    Python::with_gil(|py| unsafe { (*val.0.get()).get(&key).map(|v| v.clone_ref(py)) })
 }
 
 #[pyfunction]
 pub fn append_value(key: &str, val: PyObject) {
     let shared_val = get_value_ref();
     unsafe {
-        (*shared_val.0.get()).insert(key.to_string(), val);
+        (*shared_val.0.get()).insert(ustr_from(key), val);
     }
 }
 

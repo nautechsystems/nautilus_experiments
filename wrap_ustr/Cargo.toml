@@ -1,0 +1,12 @@
+[package]
+name = "wrap_ustr"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ustr = "1.1.0"
+
+[lib]
+name = "wrap_ustr"
+crate-type = ["cdylib"]
+
