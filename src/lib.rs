@@ -1,10 +1,9 @@
-use std::{cell::UnsafeCell, collections::HashMap, ffi::c_char, sync::OnceLock};
+use std::{cell::UnsafeCell, sync::OnceLock};
 
 use indexmap::IndexMap;
 use pyo3::prelude::*;
-use ustr::Ustr;
 
-pub struct SharedVal(Box<UnsafeCell<IndexMap<String, PyObject>>>);
+pub struct SharedVal(Box<UnsafeCell<IndexMap<String, String>>>);
 
 // SAFETY: Cannot be sent across thread boundaries
 #[allow(unsafe_code)]
@@ -30,13 +29,13 @@ pub fn print_value_ptr_address() {
 pub fn export_value_ptr() -> u64 {
     let val = get_value_ref();
     // Return pointer to the UnsafeCell, not its contents
-    (&*val.0) as *const UnsafeCell<IndexMap<String, PyObject>> as u64
+    (&*val.0) as *const UnsafeCell<IndexMap<String, String>> as u64
 }
 
 #[pyfunction]
 pub fn set_value_from_ptr(addr: u64) -> PyResult<()> {
     if addr != 0 {
-        let ptr = addr as *mut UnsafeCell<IndexMap<String, PyObject>>;
+        let ptr = addr as *mut UnsafeCell<IndexMap<String, String>>;
         if !ptr.is_null() {
             let _ = VALUE.set(SharedVal(unsafe { Box::from_raw(ptr) }));
         };
@@ -45,14 +44,14 @@ pub fn set_value_from_ptr(addr: u64) -> PyResult<()> {
 }
 
 #[pyfunction]
-pub fn get_value(key: &str) -> Option<PyObject> {
+pub fn get_value(key: &str) -> Option<String> {
     let val = get_value_ref();
     let key = key.to_string();
-    Python::with_gil(|py| unsafe { (*val.0.get()).get(&key).map(|v| v.clone_ref(py)) })
+    unsafe { (*val.0.get()).get(&key).map(|v| v.clone()) }
 }
 
 #[pyfunction]
-pub fn append_value(key: &str, val: PyObject) {
+pub fn append_value(key: &str, val: String) {
     let shared_val = get_value_ref();
     unsafe {
         (*shared_val.0.get()).insert(key.to_string(), val);

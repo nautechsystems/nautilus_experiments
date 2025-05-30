@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
+use pyo3_test::{export_value_ptr, get_value, print_value_ptr_address};
 use std::ffi::CString;
-use pyo3_test::{append_value, export_value_ptr, get_value, print_hello_world, print_value_ptr_address};
 
 fn main() {
     // Your actual main code here
@@ -15,15 +15,13 @@ fn main() {
     pyo3::prepare_freethreaded_python();
     println!("{:?}", get_value("1"));
     println!("{:?}", get_value("2"));
-    
+
     print_value_ptr_address();
     let ptr = export_value_ptr();
 
     Python::with_gil(|py| {
         let pymod = PyModule::from_code(py, &code, &filename, &module).unwrap();
-        let test_class = pymod.getattr("Test").unwrap();
-        let test_instance = test_class.call0().unwrap();
-        
+
         // Set the static variable to the pointer
         let set_val_method = pymod.getattr("set_value_from_ptr").unwrap();
         set_val_method.call1((ptr,)).unwrap();
@@ -36,19 +34,7 @@ fn main() {
         let get_val_method = pymod.getattr("get_value").unwrap();
         let val = get_val_method.call1(("2",)).unwrap();
         println!("Got value from python get_value method: {}", val);
-        
-        let do_method = test_instance.getattr("do").unwrap();
-        do_method.call0().unwrap();
-
-         // Check the static variable is updated
-        let get_val_method = pymod.getattr("get_value").unwrap();
-        let val = get_val_method.call1(("2",)).unwrap();
-        println!("Got value again from python get_value method: {}", val);
-               
-        if let Some(val) = get_value("2") {
-            val.call0(py).unwrap();
-        }
     });
-    
+
     println!("{:?}", get_value("2"));
 }
